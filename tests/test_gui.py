@@ -6,7 +6,7 @@ from tkinter import ttk
 import unittest
 from unittest.mock import patch
 
-from moss_trainer.gui import App, ProjectDialog, ResumeDialog, ImportDialog
+from moss_trainer.gui import App, ProjectDialog, ResumeDialog, ImportDialog, ScrollPage
 from moss_trainer.core import atomic_json
 
 
@@ -44,13 +44,31 @@ class GuiTests(unittest.TestCase):
         for direction in (-30, 30, -30):
             page.canvas.yview_scroll(direction, 'units')
             self.app.update()
-            self.assertLessEqual(abs(page.canvas.canvasy(0)), 2)
+            # A window manager may clamp 1050px to a shorter CI desktop.
+            # Scrolling is valid when the form really exceeds that viewport.
+            offset = page.canvas.canvasy(0)
+            maximum = max(0, page.body.winfo_reqheight() - page.canvas.winfo_height())
+            self.assertGreaterEqual(offset, -2)
+            self.assertLessEqual(offset, maximum + 2)
         self.app.geometry('1000x700')
         self.app.update()
         page.canvas.yview_moveto(1)
         self.app.geometry('1220x1050')
         self.app.update()
-        self.assertLessEqual(abs(page.canvas.canvasy(0)), 2)
+        offset = page.canvas.canvasy(0)
+        maximum = max(0, page.body.winfo_reqheight() - page.canvas.winfo_height())
+        self.assertGreaterEqual(offset, -2)
+        self.assertLessEqual(offset, maximum + 2)
+        short = ScrollPage(self.app.notebook)
+        self.app.notebook.add(short, text='Short form fixture')
+        ttk.Label(short.body, text='Model path').grid(row=0, column=0)
+        self.app.notebook.select(short)
+        self.app.update()
+        self.assertLessEqual(short.body.winfo_reqheight(), short.canvas.winfo_height())
+        for direction in (-30, 30, -30):
+            short.canvas.yview_scroll(direction, 'units')
+            self.app.update()
+            self.assertLessEqual(abs(short.canvas.canvasy(0)), 2)
 
     def test_bottom_actions_remain_visible_when_tabs_and_metrics_resize(self):
         for geometry in ('1220x880', '1000x700'):

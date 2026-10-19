@@ -1,0 +1,166 @@
+# MOSS Studio 利用ガイド
+
+MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 3.11 以上で `start.bat` をダブルクリックして起動します。GUI 自体に追加の pip パッケージは不要です（tkinter が必要）。学習環境は「かんたん導入」で作成できます。モデルファイルは別途用意してください。
+
+対象GPUは CUDA / bf16 対応の NVIDIA ビデオカードです。推奨設定は特定の機種名ではなく、VRAM容量別に用意しています。初期値は VRAM 12GB のビデオカード向けで、16GB・24GB以上のプリセットも選べます。
+
+画面はネイビーとティールを基調にしています。白い欄は直接入力、淡いティールの欄はクリックして選択、グレーの欄は無効状態です。選択中のタブや主要操作は濃いティールで表示します。
+
+**モデル選びは同梱の [推奨モデル.txt](../推奨モデル.txt) を参照してください。** VRAM 12GB・16GB・24GB以上ごとの具体的なファイル名、ダウンロード先、GUIプリセット、bf16分割ファイルの指定方法を記載しています。
+
+## かんたん導入（推奨）
+
+**Python 3.12（64bit）をインストール済みなら、`install.bat` を開いて「導入・確認・修復を開始」を押すだけです。** GUI 右上の「かんたん導入」からも同じ操作ができます。
+
+- 初回だけ専用 venv と sd-scripts を作成します。2 回目以降は、この GUI が作った同じ専用環境を確認・修復します。他用途の venv やグローバルパッケージは流用しません。
+- sd-scripts は公式リポジトリの ZIP から取得するため Git は不要です。
+- CUDA 版 PyTorch、sd-scripts の requirements、TensorBoard、bitsandbytes を順に導入します。
+- CUDA / bf16 と MOSS スクリプトの起動をチェックし、成功した場合だけ GUI の Python / sd-scripts 設定を登録します。
+- 途中失敗・停止後も同じ導入先で再試行できます。フォルダは増やさず、既存の学習結果を削除しません。専用環境かどうかを識別ファイルで確認し、不明な環境は変更せず停止します。
+
+標準は PyTorch 2.8.0 / CUDA 12.8（`cu128`）です。ドライバとの組み合わせに応じて PyTorch 2.6.0 / CUDA 12.4（`cu124`）も選べます。NVIDIA ドライバや Python 自体のインストールは自動では行いません。3.12 / 3.11 の64bit Pythonを自動検出できない場合は、「作成用 Python」の参照ボタンで指定します。
+
+取得にはインターネット接続と数GB以上の空き容量が必要です。通常の導入先は `backend/moss-env/`、venv はその中の `venv/` です。再実行時にも同じ導入先・CUDA プロファイルを初期表示します。取得済み sd-scripts は版を維持し、依存パッケージを確認・修復します。修復時には専用 venv 内のパッケージが変更されることがあります。失敗時に GUI の参照パスは変更しませんが、修復中のパッケージ変更をロールバックする方式ではありません。
+
+ログは `data/setup-logs/`、取得した sd-scripts の commit と環境情報は `installation.json`、パッケージ一覧は `packages.txt` に残します。モデル本体はダウンロードしません。Triton は互換性が環境に依存するため自動導入せず、INT8 は bf16 fallback を利用できます。
+
+## 最初に使うとき
+
+1. ZIP を展開し、`start.bat` を起動します。コマンドからは `python launch.py`。
+2. 「かんたん導入」で新規環境を作ります。手動で準備した環境を使う場合は、右上の「実行環境」で Python と sd-scripts フォルダを指定できます。
+3. 「保存して環境チェック」で CUDA / bf16 / パッケージを確認します。
+4. 「モデル」タブの各「参照…」で、DiT、Qwen3.5-9B、FLUX.2 VAE をファイル選択ダイアログから指定します。手入力もできます。
+5. 「データセット」で画像フォルダを選びます。画像と同じファイル名の `.txt` にキャプションを入れてください。複数フォルダはサブセットを追加します。
+6. GPU 容量を選択し、学習対象に合わせて STEP 数などを調整します。「設定を確認」後に「学習を開始」。
+
+### 手動で学習用環境を準備する場合
+
+既に MOSS 対応 sd-scripts の環境があればそれを指定できます。Anima の trainer フォルダそのものを指定する構成ではありません。
+
+新しく用意する場合の流れ（PowerShell、GUI のフォルダで実行）:
+
+```powershell
+git clone https://github.com/kohya-ss/sd-scripts.git backend/sd-scripts
+py -3.12 -m venv backend/venv
+```
+
+次に、[PyTorch 公式のインストール案内](https://pytorch.org/get-started/locally/)に従って、**`backend/venv/Scripts/python.exe -m pip` を使い** GPU・ドライバに対応する CUDA 版 PyTorch をインストールします。その後:
+
+```powershell
+backend/venv/Scripts/python.exe -m pip install -r backend/sd-scripts/requirements.txt
+backend/venv/Scripts/python.exe -m pip install tensorboard bitsandbytes
+```
+
+sd-scripts の環境要件を優先してください。GUI と学習用 Python は別の環境でも構いません。INT8 の高速カーネルには、PyTorch と対応する Triton 環境が必要です。学習開始時に不足パッケージや起動エラーがあればログに表示します。環境チェックは全ライブラリの ABI 互換性やモデルの読込成功までは保証しません。
+
+## 初期値と変更方法
+
+すべての表示数値を編集できます。プリセットは入力値を一括変更する補助機能です。モデルの場所や画像フォルダをプリセットが書き換えることはありません。
+
+| 項目 | 初期値 |
+|---|---|
+| 学習上限 | 1,500 STEP |
+| 学習率 | 1e-4 |
+| Rank / Alpha | 16 / 1 |
+| Optimizer / scheduler | AdamW8bit / constant |
+| 保存間隔 | **100 STEP** |
+| 再開用 state 保存 | モデル保存時 ON、正常終了時 ON |
+| 学習解像度 / batch | 1024 / 1 |
+| Caption dropout | 0.05 |
+| 学習対象 | DiT。Qwen 自体は凍結 |
+| 学習サンプリング | sigma / logit_normal / mean -1.09 / std 0.95 / shift 1 |
+
+1,500 STEP と caption dropout 0.05 は、この GUI の開始値としての提案です。学習率と Rank は公式ガイドの例を参考にしています。データ量や目的によって最適値は変わります。STEP 数は入力欄で直接変更できます。Alpha を上げる場合は学習率も再検討してください。
+
+「学習の終了条件」で **STEP 数 / エポック数**を切り替えます。STEP モードではエポック値を出力せず、エポックモードでは STEP 上限を出力しません。保存間隔は終了条件と独立しており、100 STEP ごとの保存のままエポック指定で学習できます。エポックごとの保存にする場合は、STEP 保存間隔を 0 にしてエポック保存間隔を設定します。
+
+### VRAM プリセット
+
+| GPU VRAM | DiT / Qwen | CPU block swap |
+|---|---|---|
+| 12GB（初期値） | ConvRot INT8 / INT8 | 20 |
+| 16GB | ConvRot INT8 / INT8 | 0 |
+| 24GB 以上 | bf16 / bf16 | 0 |
+
+いずれも batch 1、gradient checkpointing、latent / TE 出力のディスクキャッシュを ON にします。12GB でメモリ不足なら swap を 36 に上げたり、解像度を下げて調整できます。8GB 向けの動作は想定していません。必要 VRAM は画像・キャプション長などでも変わります。CPU スワップには十分な RAM とページファイルも必要です。
+
+Attention は初期値の `torch` を推奨します。`xformers` を選ぶと必須の Split attention を自動で ON にし、変更不可にします。過去のプロジェクトで組み合わせが不整合でも読込時に補正します。`xformers` / `flash` 自体の追加パッケージは別途必要です。
+
+### 生成用の初期値
+
+「サンプル」タブに幅 1024 / 高さ 1024、50 ステップ、CFG 3.0、生成用 Flow shift 5.0、seed 42、negative 空欄、unconditional skip layer 22 を設定済みです。学習用 shift と生成用 shift は別項目です。
+
+12GB では学習中の自動生成を初期 OFF にしています。ON にした場合は初期設定で 250 STEP ごとに生成します。プロンプトは学習対象に置き換えてください。1 行 1 件で、行内の `--w` / `--h` / `--s` / `--l` / `--fs` / `--d` / `--n` が共通生成値より優先されます。画像は学習バックエンドが実行フォルダの `models/sample` 配下に保存します。サンプルの TE 出力を学習開始時にキャッシュするため、実行中の変更は次回から反映されます。単独の推論アプリは含みません。
+
+## プロジェクト
+
+「＋ 新規 / コピー」で、推奨初期値からの新規作成と既存プロジェクトの設定コピーを選べます。コピー対象はモデルパス、画像パス、サブセット、学習・生成設定です。データ画像自体は複製しません。出力名、初期 LoRA 重み、再開 state 指定はリセットされ、実行履歴やモデルはコピーされません。
+
+設定は `data/projects/<ID>/project.json`、共通の Python / sd-scripts 設定は `data/environment.json` に保存します。`Ctrl+S` でも保存できます。保存した設定は GUI 再起動後も利用できます。`MOSS_TRAINER_DATA` 環境変数で保存先を変更できます。
+
+### 設定の書き出し・読み込み
+
+「設定を書き出す」で作られたフォルダには、再読み込み用の `project_snapshot.json` が入っています。「設定を読み込む」からこの JSON を選ぶと、設定・モデルパス・画像パスを確認したうえで、新しいプロジェクトとして取り込めます。保存済みプロジェクトの `project.json` や、実行履歴の `project_snapshot.json` も使用できます。
+
+読み込み時は学習・生成設定、モデルと画像のパス、出力 LoRA 名を復元します。実行履歴は取り込まず、state 再開と初期 LoRA 重みの指定は解除します。このPCの Python / sd-scripts の共通設定を使用します。別PCのパスが存在しなくても取り込めるので、読み込み後に「参照…」で選び直してください。未対応の形式や不正な型は読み込み時にエラーを表示します。古い版で省略されている項目は初期値を補います。
+
+対象は MOSS Studio が書き出す設定 JSON です。`train.toml` / `dataset.toml` を直接編集した内容を取り込む機能や、他GUIの設定形式の変換は含みません。
+
+## レジューム
+
+### state から続きの学習
+
+1. 「学習」→「保存した state から再開…」を開きます。
+2. このプロジェクトの実行履歴から候補を選びます。STEP / epoch / 構造チェック結果を表示します。外部 state はフォルダ選択できます。
+3. 「元のモデル・データ・学習設定を復元」を ON にし、総 STEP 上限を設定して適用します。
+4. 設定を確認して学習を開始します。例: STEP 600 の state から総 STEP 上限 1500 なら、1500 を目標に続けます。上限は追加 STEP 数ではありません。
+
+state の model / optimizer / scheduler / 乱数ファイルと `train_state.json` の存在・空ファイル・進捗を検査します。元の設定 snapshot がある場合は、Rank、Alpha、optimizer、scheduler、LR、モデルパス、データ設定などの差を検出します。これらの変更が必要な場合は、元設定を復元するか、LoRA 重みからの追加学習に切り替えてください。VRAM 設定と保存間隔、生成設定、上限は変更できます。
+
+`skip_until_initial_step` を初期 ON とし、sd-scripts が state の進捗を使用して処理済みデータをスキップします。読み込んだ optimizer / scheduler / RNG の実際の復元は Accelerate が担当します。外部 state に元設定がない場合は自動比較できず、GUI はその旨を表示します。構造チェックはテンソルの破損や画像ファイルの内容変更までは検証しません。データや学習エンジンの版も元の実行と揃えてください。
+
+再開は新しい実行フォルダを作ります。`resume_source.json` に元 state のパスと STEP / epoch を記録し、以前の実行結果を上書きしません。通常終了時にも state を保存します。「停止」はプロセスを終了するため、**停止時点の未保存状態は残りません**。直近の完成した state から再開してください。保存中に停止した state は不完全な場合があります。最初の 100 STEP より前には定期 state がまだありません。
+
+### LoRA 重みから追加学習
+
+「再開指定を解除」後に「初期 LoRA 重み」をファイル選択します。この場合は optimizer と scheduler を新規に作り、STEP は新しく数えます。state 指定との同時使用は開始前に止めます。
+
+## 実行結果・ログ
+
+画面下部に学習STEPの進捗、残り時間、推定終了時刻を表示します。別の設定タブを開いていても確認できます。学習本体の `steps:` 形式のログから計算し、初期化・キャッシュ処理中は推定せず、速度が分かってから表示します。推定終了時刻はPCのローカル時刻です。
+
+保存・サンプル生成・初回の最適化などで所要時間は変わるため、終了時刻は概算です。推定時刻を過ぎても新しい進捗がない場合は「計測・更新中」に戻ります。STEPが最後まで進んでも、モデルの保存や終了処理が終わるまでは「保存・終了処理中」と表示します。再開時のSTEP表示と推定は、学習バックエンドが報告する進捗を基準にします。
+
+「実行・ログ」タブの「学習終了時に通知音」で通知音を切り替えられます。初期値はONで、学習の正常終了・失敗時に通知し、手動停止や環境導入時は鳴らしません。Windowsでは同梱の `assets/pokopin.wav`（約0.9秒の、柔らかい「ポ・コ・ピン♪」という3音）を使います。「音を試す」で確認できます。通知音のON/OFFはこのPC共通の設定として `data/ui_preferences.json` に保存します。再生音量はOS側の音量設定に従います。
+
+実行ごとに `data/projects/<ID>/runs/<実行ID>/` を作成します。
+
+```text
+train.toml / dataset.toml      学習時に使った設定
+sample_prompts.txt             自動生成 ON の場合
+project_snapshot.json          開始時点の設定
+environment_snapshot.json      Python / sd-scripts の指定
+command.json                   実際に渡す引数配列
+resume_source.json             state 再開の場合
+training.log / status.json     全ログ・終了状態
+models/                        LoRA・state・サンプル
+tensorboard/                   TensorBoard ログ
+```
+
+「設定を書き出す」では実行せず TOML とスナップショットを別フォルダへ保存します。「現在の設定をプレビュー」で TOML とコマンドを確認できます。実行は shell 文字列ではなく引数配列を使います。Windows のプロセスは Job Object で管理し、停止時に Accelerate の子プロセスも終了します。画面のログは直近約 5000 行を保持し、ファイルには全ログを残します。
+
+## 検証と範囲
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）。別途、GUI 起動、ファイル選択の呼び出し、プロジェクト作成・コピー、STEP/epoch 切替、プリセット、TOML、設定競合、state 候補・復元、ログ、テスト子プロセスの起動・停止を自動テストしています。導入処理は、新しい venv の実作成、模擬ダウンロードによる導入・修復経路、失敗時の参照パス維持、設定登録をテストしています。自動テストでは実モデルのGPU学習・生成・state復元を実行していません。詳細は [検証範囲](../VALIDATION.md) を参照してください。
+
+## 参考資料
+
+- [Anima Standalone Trainer](https://github.com/gazingstars123/Anima-Standalone-Trainer): プロジェクト管理とローカル trainer の参考。元コードを同梱・改変した fork ではありません。
+- [MOSS-Image 学習ガイド](https://github.com/kohya-ss/sd-scripts/blob/main/docs/moss_image_train_network.md): MOSS の引数・推奨例・生成値・VRAM 設定の参考。
+- [sd-scripts 学習引数](https://github.com/kohya-ss/sd-scripts/blob/main/library/args.py) / [train_network.py](https://github.com/kohya-ss/sd-scripts/blob/main/train_network.py): config と state 再開の仕様確認。
+
+参照確認日: 2026-10-19。sd-scripts は利用者が指定する外部依存です。更新による変更は学習ログで確認してください。

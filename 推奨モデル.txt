@@ -1,0 +1,101 @@
+MOSS Studio — VRAM別の推奨モデル
+確認日: 2026-10-19
+
+【選び方】
+最初の動作確認には、下記の Base 版の組み合わせをおすすめします。
+DiT・Qwen3.5-9B・FLUX.2 VAE の3種類が必要です。
+対象はCUDAとbf16に対応するNVIDIAビデオカードです。
+以下は特定の機種名ではなく、搭載VRAM容量ごとの開始用設定です。
+モデルは任意のフォルダに保存し、GUI「モデル」の「参照…」で選択します。
+ComfyUI用に同じファイルを持っている場合は、そのファイルを指定できます。
+
+【VRAM 12GB】
+GUIプリセット: 12GB
+DiT: moss_image_base_int8_convrot.safetensors
+Qwen: qwen3.5_9b_int8_convrot.safetensors
+VAE: flux2-vae.safetensors
+初期設定: INT8 / INT8、CPU block swap 20、batch 1、ディスクキャッシュ ON。
+ダウンロード合計: 約15.5GB。VRAM 12GBのビデオカードでは、まずこの構成から開始してください。
+メモリ不足時は block swap を36へ上げるか、学習・生成解像度を下げて調整します。
+
+【VRAM 16GB】
+GUIプリセット: 16GB
+DiT: moss_image_base_int8_convrot.safetensors
+Qwen: qwen3.5_9b_int8_convrot.safetensors
+VAE: flux2-vae.safetensors
+初期設定: INT8 / INT8、CPU block swap 0、batch 1、ディスクキャッシュ ON。
+モデルは12GB構成と共通で、CPUスワップを省く設定です。
+
+【VRAM 24GB以上（32GB・48GBなども含む）】
+GUIプリセット: 24GB+
+DiT: moss_image_base_bf16.safetensors
+Qwen: 公式 MOSS-Image-Base の text_encoder にある bf16 の分割ファイル4個
+VAE: flux2-vae.safetensors
+初期設定: bf16 / bf16、CPU block swap 0、batch 1、ディスクキャッシュ ON。
+ダウンロード合計: 約27.3GB。
+Qwenの分割ファイル4個は、すべて同じフォルダに置きます。
+GUIには model-00001-of-00004.safetensors だけを指定してください。
+RAMやキャッシュ時の余裕を重視する場合は、Qwenだけ上記INT8版にする選択肢もあります。
+量子化済みINT8ファイルはバックエンドが自動検出します。
+
+【VRAM 8GB】
+このGUIでは推奨構成・プリセットを用意していません。
+学習中だけでなく、テキスト出力のキャッシュ作成時にもVRAMが必要です。
+
+【ダウンロード先: 12GB / 16GB 共通】
+
+DiT（約5.41GB）:
+https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/diffusion_models/moss_image_base_int8_convrot.safetensors
+
+Qwen3.5-9B（約9.75GB）:
+https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors
+
+FLUX.2 VAE（全構成共通、約336MB）:
+https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/vae/flux2-vae.safetensors
+
+各ページの Download ボタンから取得できます。
+記載容量はダウンロードファイルの容量で、学習時のVRAM使用量とは異なります。
+
+【ダウンロード先: 24GB以上のbf16構成】
+
+DiT（約10.2GB）:
+https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/diffusion_models/moss_image_base_bf16.safetensors
+
+Qwen3.5-9B（4個合計で約16.8GB）:
+https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base/tree/main/text_encoder
+
+以下の4個をすべて取得してください:
+  model-00001-of-00004.safetensors
+  model-00002-of-00004.safetensors
+  model-00003-of-00004.safetensors
+  model-00004-of-00004.safetensors
+
+VAEは上記の flux2-vae.safetensors と共通です。
+
+【SFT版を使う場合】
+学習・生成にSFT版を使いたい場合、DiTだけを次の対応ファイルに置き換えます。
+QwenとVAEの指定方法は共通です。
+
+12GB / 16GB用:
+  moss_image_sft_int8_convrot.safetensors
+  https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/diffusion_models/moss_image_sft_int8_convrot.safetensors
+
+24GB以上のbf16構成用:
+  moss_image_sft_bf16.safetensors
+  https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/diffusion_models/moss_image_sft_bf16.safetensors
+
+【形式・設定について】
+・Qwenの w4a8_gptq 版は、このsd-scriptsの学習では非対応です。
+  名前が似ていても qwen3.5_9b_int8_convrot.safetensors を選んでください。
+・Tokenizer欄は通常空欄で構いません。初回は自動取得されます。
+・キャッシュ、学習、サンプル生成で必要なメモリは異なります。
+  実際の使用量は解像度・キャプション長などにも依存します。
+・CPU block swapには十分なシステムRAMとページファイルが必要です。
+・これは公式ガイドを参考にした開始用の推奨構成です。
+  実機の確認環境と自動テストの範囲は、同梱の VALIDATION.md に記載しています。
+
+対応形式・VRAM設定の参考:
+https://github.com/kohya-ss/sd-scripts/blob/main/docs/moss_image_train_network.md
+
+Comfy-Orgの配布モデル一覧:
+https://huggingface.co/Comfy-Org/MOSS-Image/tree/main

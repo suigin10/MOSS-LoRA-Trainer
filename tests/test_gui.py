@@ -136,6 +136,62 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(project['settings']['training']['learning_rate'], 0.0001)
         self.assertEqual(project['subsets'][0]['image_dir'], '')
 
+    def test_delete_last_project_and_add_again_with_models_retained(self):
+        self.app.variables[('model', 'vae')].set('D:/models/vae.safetensors')
+        self.app.save()
+        old = self.app.project['id']
+        with patch('moss_trainer.gui.messagebox.askyesno', return_value=True):
+            self.app.delete_project()
+        self.assertIsNone(self.app.project)
+        self.assertEqual(self.app.store.list(), [])
+        self.assertTrue(self.app.start_button.instate(['disabled']))
+        self.assertTrue(self.app.delete_button.instate(['disabled']))
+        dialog = ProjectDialog(self.app)
+        dialog.name.set('追加したプロジェクト')
+        dialog.create()
+        self.assertNotEqual(self.app.project['id'], old)
+        self.assertEqual(self.app.collect()['settings']['model']['vae'], 'D:/models/vae.safetensors')
+        self.assertFalse(self.app.start_button.instate(['disabled']))
+
+    def test_delete_cancel_and_training_lock_leave_project_untouched(self):
+        old = self.app.project['id']
+        with patch('moss_trainer.gui.messagebox.askyesno', return_value=False):
+            self.app.delete_project()
+        self.assertEqual(self.app.project['id'], old)
+        self.app.set_busy(True, 'test')
+        with patch('moss_trainer.gui.messagebox.askyesno') as confirm:
+            self.app.delete_project()
+        confirm.assert_not_called()
+        self.assertEqual(len(self.app.store.list()), 1)
+        self.assertTrue(self.app.delete_button.instate(['disabled']))
+
+    def test_empty_project_list_stays_empty_after_restart_and_language_change(self):
+        with patch('moss_trainer.gui.messagebox.askyesno', return_value=True):
+            self.app.delete_project()
+        self.app.language_choice.set('English')
+        self.app.change_language()
+        self.assertIsNone(self.app.project)
+        restarted = App(self.app.data_dir)
+        try:
+            self.assertIsNone(restarted.project)
+            self.assertEqual(restarted.store.list(), [])
+        finally:
+            restarted.destroy()
+
+    def test_final_state_can_extend_total_steps(self):
+        run = self.app.store.directory(self.app.project) / 'runs' / 'completed'
+        state = run / 'models' / 'moss_lora-state'
+        state.mkdir(parents=True)
+        atomic_json(run / 'project_snapshot.json', self.app.collect())
+        atomic_json(state / 'train_state.json', {'current_step': 1500, 'current_epoch': 10})
+        for name in ('model.safetensors', 'optimizer.bin', 'scheduler.bin', 'random_states_0.pkl'):
+            (state / name).write_bytes(b'fixture-only')
+        dialog = ResumeDialog(self.app)
+        dialog.target.set('3000')
+        dialog.apply()
+        self.assertEqual(self.app.collect()['settings']['training']['max_train_steps'], 3000)
+        self.assertEqual(self.app.collect()['settings']['training']['resume'], str(state))
+
     def test_training_and_sample_defaults(self):
         p = self.app.collect()
         self.assertEqual(p['settings']['training']['max_train_steps'], 1500)

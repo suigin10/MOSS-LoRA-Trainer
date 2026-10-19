@@ -4,9 +4,9 @@
 
 A Japanese / English desktop GUI for MOSS-Image LoRA training on Windows. Includes isolated backend setup, project management, VRAM presets, resume support, and an estimated completion time. Choose **English** in the header to switch languages. See the [English quick start](docs/QUICK_START.en.md).
 
-**0.1.1rc5 プレビュー版**には、ホイール操作修正・再開修正・英語GUI・モデル引継ぎ・Caption確認・state保持設定が含まれます。同梱の「再開修正の確認手順.txt」を参照してください。今回の再開修正のMOSS実モデルでのGPU検証は確認待ちです。
+**0.1.1 正式版**です。プロジェクトの追加・削除、最終stateからの追加学習、総STEP / Epoch上限の拡張に対応しています。英語GUI、Caption確認、柔軟なLoRA保存、最新stateの保持設定も利用できます。
 
-> **初期プレビュー版**：RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）。GUI・設定・導入制御などの自動テストも実施しています。検証範囲は [VALIDATION.md](VALIDATION.md) を参照してください。
+> **RTX 4070（VRAM 12GB）で実機検証済み**（提供者による確認）。今回の更新についても提供者による動作確認済みです。自動テストと検証範囲は [VALIDATION.md](VALIDATION.md) を参照してください。
 
 ## ダウンロード・導入
 
@@ -39,6 +39,7 @@ VRAMだけで動作を保証するものではありません。画像解像度�
 - STEP数／エポック数の切り替え、設定の保存・書き出し・読み込み
 - VRAM容量別のプリセット、設定の競合チェック
 - LoRA重みからの追加学習、保存したstateからの再開、元設定との比較
+- プロジェクトの追加・削除、最終stateからOptimizer状態を保った追加学習と総上限の変更
 - サンプル生成パラメーター、ログ・進捗・残り時間・推定終了時刻
 - 完了／失敗時の「ポ・コ・ピン♪」通知音とON／OFF・試聴
 

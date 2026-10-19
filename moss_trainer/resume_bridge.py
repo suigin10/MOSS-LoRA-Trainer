@@ -13,7 +13,7 @@ import runpy
 import sys
 
 
-def patch_source(source):
+def patch_source(source, recalculate_scheduler=False):
     tree = ast.parse(source)
     trainer = next((n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'NetworkTrainer'), None)
     train = next((n for n in trainer.body if isinstance(n, ast.FunctionDef) and n.name == 'train'), None) if trainer else None
@@ -25,6 +25,15 @@ def patch_source(source):
         edits.append((node.lineno - 1, node.end_lineno, text))
     def assign(node, name):
         return isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets)
+    if recalculate_scheduler:
+        resume = [n for n in train.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+                  and ast.unparse(n.value.func) == 'args_util.resume_from_local_or_hf_if_specified']
+        if len(resume) != 1:
+            raise RuntimeError('未対応の sd-scripts: scheduler復元処理が変更されています')
+        node = resume[0]
+        edits.append((node.end_lineno, node.end_lineno,
+                      '        if args.resume:\n'
+                      '            _moss_realign_scheduler(lr_scheduler, steps_from_state)\n'))
     start = next((i for i, n in enumerate(train.body) if assign(n, 'epoch_to_start')), None)
     if start is None or start + 2 >= len(train.body) or not assign(train.body[start + 2], 'global_step'):
         raise RuntimeError('未対応の sd-scripts: 再開位置の処理が変更されています')
@@ -67,23 +76,28 @@ def patch_source(source):
 def main():
     backend = Path(sys.argv.pop(1)).resolve()
     keep_latest = False
+    recalculate_scheduler = False
     if sys.argv[1:2] == ['--state-policy']:
         policy = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
         del sys.argv[1:3]
         keep_latest = policy.get('keep_latest_state_only', False)
-        if type(keep_latest) is not bool:
+        recalculate_scheduler = policy.get('recalculate_scheduler', False)
+        if type(keep_latest) is not bool or type(recalculate_scheduler) is not bool:
             raise ValueError('Invalid state retention policy')
     sys.path.insert(0, str(backend))
     path = backend / 'train_network.py'
-    source = patch_source(path.read_text(encoding='utf-8-sig'))
+    source = patch_source(path.read_text(encoding='utf-8-sig'), recalculate_scheduler)
     spec = importlib.util.spec_from_file_location('train_network', path)
     module = importlib.util.module_from_spec(spec)
     sys.modules['train_network'] = module
     exec(compile(source, str(path), 'exec'), module.__dict__)
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    if recalculate_scheduler:
+        from moss_trainer.resume_schedule import realign_scheduler
+        module._moss_realign_scheduler = realign_scheduler
     if keep_latest:
         # This script is launched by absolute path in the backend environment.
         # Add only the GUI package root to import the stdlib-only retention helper.
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from moss_trainer.state_retention import install_state_retention
         from library import checkpoint_io
         install_state_retention(checkpoint_io)

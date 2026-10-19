@@ -1,6 +1,6 @@
 # MOSS Studio — English quick start
 
-This is the **0.1.1rc5 preview release**, including a mouse wheel fix, resume fixes, an English GUI, model settings retained for new projects, clearer caption counts and state retention. The MOSS GPU resume fix is awaiting user testing.
+This is the **0.1.1 stable release**, with project management and training extensions from final states. The provider has confirmed operation of this update and previously verified training on an RTX 4070 (12 GB VRAM). See [validation notes](../VALIDATION.md) for the automated test scope.
 
 ## Install and launch
 
@@ -14,21 +14,25 @@ This is the **0.1.1rc5 preview release**, including a mouse wheel fix, resume fi
 
 Mouse wheel input over a closed dropdown scrolls the settings page without changing its value. Open the dropdown to select another option.
 
-**New / Copy** can create a project from recommended defaults or copy another project's settings. New projects retain the current model settings while resetting training settings and image subsets. Copy also keeps data and training settings. **Import** loads this app's `project_snapshot.json` or `project.json` into a new project. Language changes preserve unsaved settings, paths, prompts and log contents; project names and user content are never translated. Fix invalid numeric input before switching languages. Language selection is disabled during training, setup and environment checks.
+**Add / Copy** can create a project from recommended defaults or copy another project's settings. New projects retain the current model settings while resetting training settings and image subsets. Copy also keeps data and training settings. **Import** loads this app's `project_snapshot.json` or `project.json` into a new project. Language changes preserve unsaved settings, paths, prompts and log contents; project names and user content are never translated. Fix invalid numeric input before switching languages. Language selection is disabled during training, setup and environment checks.
 
 Use **Count images / captions** to see recognized captions as N / M. A missing count of 0 means no captions are missing. Put `image.png` and `image.txt` in the same folder and save text as UTF-8. Select the folder containing the images directly; parent folders are not scanned recursively. The report shows expected filenames, empty text and encoding errors. It does not rename or edit your files.
+
+Use **Delete** to remove the selected project from the list. After confirmation, its entire folder moves to `data/projects/_trash/`. External models and images stay in place; files stored inside the project folder move with it. Unsaved edits are discarded. An empty project list stays empty across restarts; use **Add / Copy** to create a project again.
 
 The default plan is 1500 steps, learning rate 1e-4, rank 16, alpha 1, and AdamW8bit with a constant scheduler. Model and resume state saves default to every 100 steps. You can change values or select epoch mode for new training.
 
 LoRA saving is flexible: change the step interval, the epoch interval, or use both. Set an interval to 0 to disable it. **Keep only the latest state** is ON by default: after a new state saves successfully, older completed states from this run are removed. The final state replaces the previous periodic state after a successful final save. LoRA files, resume source states and states from other runs are kept. Turn this option OFF to retain all states. The policy reduces retained disk usage; it still writes each scheduled state and temporarily requires space for the old and new states.
 
-## Resume testing
+## Resume and extend training
 
-Open **Resume from state**, choose a completed state save and enable **Restore original model, data and training settings**. Keep the original optimizer, learning rate, scheduler, data and step/epoch limit. The limit is the total training plan, not additional steps. For example, a state saved at step 600 resumes at 600, with the next update at 601 and the next 100-step save at 700.
+Open **Resume / extend from state**, choose an interrupted or final state, and restore the original model/data/training settings. Keeping the same total limit restores the original optimizer and scheduler without LR recalculation.
 
-The compatibility launcher fixes cumulative step accounting and batch positions without editing the installed sd-scripts checkout. Accelerate restores the actual optimizer and scheduler state. To change the training plan or continue past its original limit, clear resume and start new training from LoRA weights; that creates a new optimizer and scheduler.
+To extend a completed run, increase the total step limit. A state at step 1500 with a new total of 3000 runs 1500 additional steps, starting with update 1501. Epoch-based projects can extend the total epoch limit. Optimizer moments and counters are retained.
 
-Force stop loses unsaved progress. Use the latest completed state. A state already re-saved with incorrect counters cannot have its historical progress reconstructed by this fix; use a state from before the drift if possible.
+Changing the total limit recalculates LR at the saved step using the new total schedule. Constant LR stays constant; linear and cosine LR change at resume. A final state whose old schedule reached zero LR can therefore train further on the extended curve. Scheduler and optimizer are not stepped artificially; inconsistent saved counters stop the run with an error. Changing optimizer type, scheduler type, base LR or data requires starting new training from LoRA weights instead.
+
+The compatibility launcher leaves the installed sd-scripts source intact. Resume writes to a new run folder and records the source state and policy. Force stop loses unsaved progress. Use a completed, consistent state checkpoint.
 
 ## Logs and test scope
 

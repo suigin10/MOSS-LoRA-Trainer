@@ -175,6 +175,18 @@ class ProjectStore:
     def save(self, project):
         atomic_json(self.directory(project) / 'project.json', project)
 
+    def remove(self, project):
+        source = self.directory(project)
+        if source.resolve() != source or source.resolve().parent != self.root or not source.is_dir():
+            raise ValueError(tr('プロジェクトの保存先が不正です'))
+        trash = self.root / '_trash'
+        if trash.resolve() != trash:
+            raise ValueError(tr('削除済みプロジェクトの保存先が不正です'))
+        trash.mkdir(exist_ok=True)
+        destination = trash / (project['id'] + '_' + uuid4().hex[:12])
+        source.rename(destination)
+        return destination
+
     def load(self, path):
         p = json.loads(Path(path).read_text(encoding='utf-8'))
         if not isinstance(p, dict) or p.get('schema_version') != SCHEMA_VERSION:
@@ -321,14 +333,17 @@ def validate(project, env=None, files=False):
                 if t['max_train_steps']:
                     require(t['max_train_steps'] > info['step'], tr('総 STEP 上限は保存済み {p0} steps より大きくしてください（追加 STEP 数ではありません）', p0=info['step']))
                 else:
-                    require(t['max_train_epochs'] >= info['epoch'], tr('再開時の総エポック数は保存済み epoch {p0} 以上にしてください（同じエポックの途中から再開可能）', p0=info['epoch']))
+                    if info.get('final'):
+                        require(t['max_train_epochs'] > info['epoch'], tr('最終stateの追加学習では総Epoch上限を保存済みEpochより大きくしてください'))
+                    else:
+                        require(t['max_train_epochs'] >= info['epoch'], tr('再開時の総エポック数は保存済み epoch {p0} 以上にしてください（同じエポックの途中から再開可能）', p0=info['epoch']))
                 errors.extend(resume_differences(project, info))
     return errors
 
 
 def state_info(folder):
     folder = Path(folder).resolve()
-    info = {'path': str(folder), 'step': 0, 'epoch': 0, 'errors': [], 'snapshot': None}
+    info = {'path': str(folder), 'step': 0, 'epoch': 0, 'errors': [], 'snapshot': None, 'final': False}
     try:
         metadata = json.loads((folder / 'train_state.json').read_text(encoding='utf-8'))
         if type(metadata['current_step']) is not int or metadata['current_step'] < 0 or type(metadata['current_epoch']) is not int or metadata['current_epoch'] < 0:
@@ -356,6 +371,7 @@ def state_info(folder):
                 if group not in FIELDS or not isinstance(values, dict) or any(key not in FIELDS[group] for key in values):
                     raise ValueError(tr('snapshot の設定形式が不正です'))
             info['snapshot'] = saved
+            info['final'] = folder.name == saved['settings'].get('training', {}).get('output_name', 'moss_lora') + '-state'
         except (OSError, ValueError) as exc:
             info['errors'].append(tr('再開元の設定を読めません: {p0}', p0=exc))
     return info
@@ -370,8 +386,7 @@ def resume_differences(project, info):
         'model': tuple(FIELDS['model']), 'dataset': tuple(FIELDS['dataset']),
         'flow': tuple(FIELDS['flow']),
         'training': ('network_dim', 'network_alpha', 'optimizer_type', 'lr_scheduler', 'learning_rate',
-                     'lr_warmup_steps', 'gradient_accumulation_steps', 'max_grad_norm', 'seed',
-                     'max_train_steps', 'max_train_epochs'),
+                     'lr_warmup_steps', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
     }.items():
         for key in keys:
             original = source['settings'].get(group, {}).get(key, FIELDS[group][key][1])
@@ -380,6 +395,16 @@ def resume_differences(project, info):
     if project['subsets'] != source['subsets']:
         differences.append(tr('state 再開の設定差: 画像サブセット。元の画像パス・repeat・class tokens に戻してください'))
     return differences
+
+
+def resume_limit_changed(project, info):
+    source = info.get('snapshot')
+    if not source:
+        return True
+    before, after = source['settings']['training'], project['settings']['training']
+    if before.get('max_train_steps', 1500) or after['max_train_steps']:
+        return before.get('max_train_steps', 1500) != after['max_train_steps']
+    return before.get('max_train_epochs', 10) != after['max_train_epochs']
 
 
 def discover_states(project_dir):
@@ -502,10 +527,12 @@ def write_run(project, env, run_dir):
         (run_dir / 'sample_prompts.txt').write_text(sample_prompts_text(project['settings']), encoding='utf-8')
     atomic_json(run_dir / 'project_snapshot.json', project)
     atomic_json(run_dir / 'environment_snapshot.json', env)
-    atomic_json(run_dir / 'state_policy.json', {'keep_latest_state_only': project['settings']['training']['keep_latest_state_only']})
+    info = state_info(project['settings']['training']['resume']) if project['settings']['training']['resume'] else None
+    atomic_json(run_dir / 'state_policy.json', {
+        'keep_latest_state_only': project['settings']['training']['keep_latest_state_only'],
+        'recalculate_scheduler': bool(info and resume_limit_changed(project, info))})
     atomic_json(run_dir / 'command.json', command(env, run_dir))
     if project['settings']['training']['resume']:
-        info = state_info(project['settings']['training']['resume'])
         atomic_json(run_dir / 'resume_source.json', {key: value for key, value in info.items() if key != 'snapshot'})
     return command(env, run_dir)
 

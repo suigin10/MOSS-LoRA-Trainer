@@ -12,7 +12,7 @@ import unittest
 from moss_trainer.core import (ProjectStore, Runner, apply_preset, command, dataset_config,
                                dataset_report, defaults, dump_toml, probe_errors,
                                sample_prompts_text, training_config, validate, write_run)
-from moss_trainer.core import atomic_json, state_info, discover_states, resume_differences
+from moss_trainer.core import atomic_json, state_info, discover_states, resume_differences, resume_limit_changed
 
 
 class CoreTests(unittest.TestCase):
@@ -324,14 +324,59 @@ class CoreTests(unittest.TestCase):
         self.p['settings']['training']['network_weights'] = 'warm-start.safetensors'
         self.assertTrue(any('同時に指定' in x for x in validate(self.p)))
 
-    def test_resume_rejects_changed_scheduler_horizon_and_optimizer(self):
+    def test_resume_allows_extended_limit_but_rejects_optimizer_or_lr_changes(self):
         info = state_info(self.create_state())
-        for key, value in [('max_train_steps', 2000), ('max_train_epochs', 20),
-                           ('optimizer_type', 'AdamW'), ('lr_scheduler', 'cosine'), ('learning_rate', 0.002)]:
+        self.p['settings']['training']['max_train_steps'] = 2000
+        self.assertEqual(resume_differences(self.p, info), [])
+        self.assertTrue(resume_limit_changed(self.p, info))
+        for key, value in [('optimizer_type', 'AdamW'), ('lr_scheduler', 'cosine'), ('learning_rate', 0.002)]:
             original = self.p['settings']['training'][key]
             self.p['settings']['training'][key] = value
             self.assertTrue(resume_differences(self.p, info), key)
             self.p['settings']['training'][key] = original
+
+    def test_project_deletion_moves_history_to_trash_and_keeps_external_files(self):
+        folder = self.store.directory(self.p)
+        run = folder / 'runs' / 'first'
+        run.mkdir(parents=True)
+        (run / 'model.safetensors').write_bytes(b'history')
+        destination = self.store.remove(self.p)
+        self.assertFalse(folder.exists())
+        self.assertTrue((destination / 'project.json').exists())
+        self.assertEqual((destination / 'runs' / 'first' / 'model.safetensors').read_bytes(), b'history')
+        self.assertTrue((self.images / '猫.png').exists())
+        self.assertEqual(self.store.list(), [])
+
+    def test_extended_final_state_policy_is_recorded_without_cli_only_flags(self):
+        state = self.create_state(step=1500)
+        self.p['settings']['training'].update(resume=str(state), max_train_steps=3000)
+        self.assertEqual(resume_differences(self.p, state_info(state)), [])
+        run = self.root / 'extension'
+        write_run(self.p, {'python': sys.executable, 'sd_scripts': str(self.root)}, run)
+        policy = json.loads((run / 'state_policy.json').read_text())
+        self.assertTrue(policy['recalculate_scheduler'])
+        config = tomllib.loads((run / 'train.toml').read_text())
+        self.assertEqual(config['max_train_steps'], 3000)
+        self.assertNotIn('recalculate_scheduler', config)
+
+    def test_unchanged_horizon_does_not_request_scheduler_recalculation(self):
+        state = self.create_state()
+        self.p['settings']['training']['resume'] = str(state)
+        run = self.root / 'same-plan'
+        write_run(self.p, {'python': sys.executable, 'sd_scripts': str(self.root)}, run)
+        self.assertFalse(json.loads((run / 'state_policy.json').read_text())['recalculate_scheduler'])
+
+    def test_final_epoch_state_is_identified_and_epoch_limit_can_be_extended(self):
+        self.p['settings']['training'].update(max_train_steps=0, max_train_epochs=10)
+        state = self.create_state(step=1500)
+        final = state.with_name(self.p['settings']['training']['output_name'] + '-state')
+        state.rename(final)
+        atomic_json(final / 'train_state.json', {'current_step': 1500, 'current_epoch': 10})
+        info = state_info(final)
+        self.assertTrue(info['final'])
+        self.p['settings']['training']['max_train_epochs'] = 20
+        self.assertTrue(resume_limit_changed(self.p, info))
+        self.assertEqual(resume_differences(self.p, info), [])
 
     def test_resume_provenance_and_automatic_progress(self):
         state = self.create_state()

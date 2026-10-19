@@ -10,6 +10,57 @@ import unittest
 @unittest.skipUnless(importlib.util.find_spec('torch') and importlib.util.find_spec('accelerate'),
                      'optional torch / accelerate integration test')
 class OptimizerResumeTests(unittest.TestCase):
+    def test_final_state_extension_recalculates_lr_without_resetting_adamw(self):
+        import copy
+        import torch
+        from accelerate import Accelerator
+        from moss_trainer.resume_schedule import realign_scheduler
+
+        accelerator = Accelerator(cpu=True)
+        for schedule in ('constant', 'constant_with_warmup', 'linear', 'cosine'):
+            with self.subTest(schedule=schedule), tempfile.TemporaryDirectory(dir=os.environ.get('MOSS_TEST_TMP')) as folder:
+                accelerator.free_memory()
+                def create(total):
+                    torch.manual_seed(42)
+                    model = torch.nn.Linear(1, 1)
+                    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+                    def factor(step):
+                        if schedule == 'constant':
+                            return 1.0
+                        if schedule == 'constant_with_warmup':
+                            return min(step / 2, 1.0)
+                        return max(0, 1-step/total) if schedule == 'linear' else (1+math.cos(math.pi*min(step,total)/total))/2
+                    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, factor)
+                    return accelerator.prepare(model, optimizer, scheduler)
+                def update(model, optimizer, scheduler):
+                    accelerator.backward((model(torch.ones(1)) - 0.5).square().mean())
+                    optimizer.step()
+                    scheduler.step()
+                    optimizer.zero_grad()
+                model, optimizer, scheduler = create(8)
+                for _ in range(8):
+                    update(model, optimizer, scheduler)
+                accelerator.save_state(folder)
+                accelerator.free_memory()
+                model, optimizer, scheduler = create(16)
+                accelerator.load_state(folder)
+                before = copy.deepcopy(optimizer.state_dict())
+                counter = scheduler.state_dict()['_step_count']
+                rates = realign_scheduler(scheduler, 8)
+                self.assertGreater(rates[0], 0)
+                self.assertAlmostEqual(rates[0], 0.005 if schedule in ('linear', 'cosine') else 0.01)
+                self.assertEqual(scheduler.state_dict()['last_epoch'], 8)
+                self.assertEqual(scheduler.state_dict()['_step_count'], counter)
+                for key, state in before['state'].items():
+                    for name, value in state.items():
+                        torch.testing.assert_close(value, optimizer.state_dict()['state'][key][name], rtol=0, atol=0)
+                weights = {key: value.clone() for key, value in model.state_dict().items()}
+                for _ in range(8):
+                    update(model, optimizer, scheduler)
+                self.assertEqual(scheduler.state_dict()['last_epoch'], 16)
+                self.assertTrue(all(int(value['step']) == 16 for value in optimizer.state.values()))
+                self.assertTrue(any(not torch.equal(value, weights[key]) for key, value in model.state_dict().items()))
+
     def test_accelerate_restores_adamw_and_lr_schedule_without_drift(self):
         import torch
         from accelerate import Accelerator

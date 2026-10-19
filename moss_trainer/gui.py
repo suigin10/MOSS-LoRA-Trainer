@@ -85,7 +85,7 @@ class ProjectDialog(tk.Toplevel):
                 if index < 0:
                     raise ValueError(tr('コピー元を選択してください'))
                 source = self.app.projects[index]
-            model_settings = self.app.collect()['settings']['model'] if source is None else None
+            model_settings = (self.app.collect()['settings']['model'] if self.app.project else self.app.last_model_settings) if source is None else None
             project = self.app.store.create(self.name.get(), source, model_settings=model_settings)
             self.app.refresh_projects(project['id'])
             self.destroy()
@@ -164,7 +164,7 @@ class ResumeDialog(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
         self.app = app
-        self.title(tr('保存した state から再開'))
+        self.title(tr('stateから再開・追加学習'))
         self.geometry(f'{min(980, self.winfo_screenwidth() - 60)}x{min(650, self.winfo_screenheight() - 100)}')
         self.minsize(640, 420)
         self.transient(app)
@@ -180,7 +180,7 @@ class ResumeDialog(tk.Toplevel):
         self.bind('<MouseWheel>', scroll_dialog)
         body = page.body
         ttk.Label(body, text=tr('再開ポイントを選択'), style='Title.TLabel').pack(anchor='w')
-        ttk.Label(body, text=tr('最新の保存日時順。停止・失敗した実行の state も表示します。元の学習計画を引き継ぎます。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=8)
+        ttk.Label(body, text=tr('中断時・最終保存のstateを日時順に表示します。総上限を編集して追加学習できます。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=8)
         self.items = discover_states(app.store.directory(app.project))
         self.tree = ttk.Treeview(body, columns=('run', 'step', 'epoch', 'status'), show='headings', height=6, selectmode='browse')
         for key, title, width in [('run', tr('実行 / state'), 520), ('step', tr('保存 STEP'), 100), ('epoch', 'Epoch', 65), ('status', tr('構造チェック'), 110)]:
@@ -199,8 +199,10 @@ class ResumeDialog(tk.Toplevel):
         self.target_label = ttk.Label(limit_row, text=tr('総 STEP 上限'))
         self.target_label.pack(side='left', padx=(0, 8))
         self.target = tk.StringVar(value='1500')
-        ttk.Entry(limit_row, textvariable=self.target, width=10, state='readonly').pack(side='left')
-        ttk.Label(body, text=tr('学習上限は元の STEP / Epoch 指定を維持します。上限・optimizer・LR を変更する追加学習は、LoRA 重みから新規に開始してください。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=10)
+        self.target_entry = ttk.Entry(limit_row, textvariable=self.target, width=10)
+        self.target_entry.pack(side='left')
+        ttk.Label(body, text=tr('総上限を増やすと最終stateからも追加学習できます。例: 保存1500 STEP → 総上限3000 STEP。追加分は1500 STEPです。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=10)
+        ttk.Label(body, text=tr('上限変更時はOptimizerの状態と累積STEPを保持し、LRを新しい総上限のスケジュールで再計算します。cosine / linearでは再開時のLRが変わります。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=6)
         ttk.Label(body, text=tr('state は optimizer / scheduler / 乱数状態を含みます。LoRA 単体から始める場合は「初期 LoRA 重み」を使用してください。'), style='Hint.TLabel', wraplength=910).pack(anchor='w', pady=10)
         controls = ttk.Frame(self, padding=(20, 12))
         controls.grid(row=1, column=0, sticky='ew')
@@ -227,7 +229,10 @@ class ResumeDialog(tk.Toplevel):
         source = info.get('snapshot')
         training = source['settings']['training'] if source else self.app.collect()['settings']['training']
         total = training.get('max_train_steps', 1500)
+        # Keep the existing plan initially. Completed states can be extended by
+        # editing this value; never silently add steps or change epoch mode.
         self.target.set(total or training.get('max_train_epochs', 10))
+        self.target_mode = 'steps' if total else 'epochs'
         self.target_label.configure(text=tr('総 STEP 上限') if total else tr('総 Epoch 上限'))
         self.restore.set(bool(source))
         self.detail.set(info['path'] + '\n' + (' / '.join(info['errors']) if info['errors'] else (tr('元設定あり: 復元して再開できます。') if source else tr('元設定なし: 自動の設定比較はできません。元のモデル・Rank・optimizer 等と揃えてください。'))))
@@ -258,9 +263,19 @@ class ResumeDialog(tk.Toplevel):
                     s[group].update(source['settings'].get(group, {}))
                 p.update(settings=s, subsets=copy.deepcopy(source['subsets']))
             training = p['settings']['training']
-            target = training['max_train_steps'] or training['max_train_epochs']
-            if training['max_train_steps'] and target <= info['step']:
-                raise ValueError(tr('元の学習上限に到達した state です。追加学習は LoRA 重みから新規に開始してください'))
+            target = int(self.target.get())
+            if target < 1:
+                raise ValueError(tr('総上限は1以上で指定してください'))
+            if self.target_mode == 'steps':
+                if target <= info['step']:
+                    raise ValueError(tr('総 STEP 上限は保存済み {p0} steps より大きくしてください（追加 STEP 数ではありません）', p0=info['step']))
+                training['max_train_steps'] = target
+            else:
+                if info.get('final') and target <= info['epoch']:
+                    raise ValueError(tr('最終stateの追加学習では総Epoch上限を保存済みEpochより大きくしてください'))
+                if target < info['epoch']:
+                    raise ValueError(tr('総Epoch上限は保存済みEpoch以上で指定してください'))
+                training.update(max_train_steps=0, max_train_epochs=target)
             training.update(resume=info['path'], network_weights='')
             errors = resume_differences(p, info)
             if errors:
@@ -268,7 +283,7 @@ class ResumeDialog(tk.Toplevel):
             saved = copy.deepcopy(self.app.saved_snapshot)
             self.app.load_project(p)
             self.app.saved_snapshot = saved
-            self.app.status.set(tr('保存 STEP {p0} から元の学習計画で再開を設定（未保存）', p0=info['step']))
+            self.app.status.set(tr('保存 STEP {p0} から総上限 {p1} への再開・追加学習を設定（未保存）', p0=info['step'], p1=target))
             self.destroy()
         except (ValueError, OSError, KeyError) as exc:
             messagebox.showerror(tr('再開設定'), str(exc), parent=self)
@@ -297,6 +312,9 @@ class App(tk.Tk):
             preferences = {}
         self.preferences = preferences if isinstance(preferences, dict) else {}
         self.language = self.preferences.get('language', 'ja')
+        self.last_model_settings = self.preferences.get('last_model_settings', defaults()['model'])
+        if not isinstance(self.last_model_settings, dict):
+            self.last_model_settings = defaults()['model']
         if self.language not in ('ja', 'en'):
             self.language = 'ja'
         set_language(self.language)
@@ -311,7 +329,7 @@ class App(tk.Tk):
         self.project = None
         self.style_ui()
         self.build()
-        if not self.store.list():
+        if not self.store.list() and not self.preferences.get('empty_projects', False):
             self.store.create(tr('はじめてのプロジェクト'))
         self.refresh_projects()
         self.poll_id = self.after(150, self.poll)
@@ -392,8 +410,10 @@ class App(tk.Tk):
         self.project_combo = ttk.Combobox(projectbar, state='readonly', width=32)
         self.project_combo.pack(side='left')
         self.project_combo.bind('<<ComboboxSelected>>', self.switch_project)
-        self.new_button = ttk.Button(projectbar, text=tr('＋ 新規 / コピー'), command=self.new_project)
+        self.new_button = ttk.Button(projectbar, text=tr('＋ 追加 / コピー'), command=self.new_project)
         self.new_button.pack(side='left', padx=8)
+        self.delete_button = ttk.Button(projectbar, text=tr('削除'), command=self.delete_project)
+        self.delete_button.pack(side='left', padx=(0, 8))
         self.import_button = ttk.Button(projectbar, text=tr('設定を読み込む'), command=self.import_settings)
         self.import_button.pack(side='left', padx=(0, 8))
         ttk.Button(projectbar, text=tr('設定を保存'), command=self.save).pack(side='left')
@@ -404,12 +424,7 @@ class App(tk.Tk):
         quick.pack(fill='x')
         self.memory_summary = tk.StringVar()
         ttk.Label(quick, textvariable=self.memory_summary, style='Subtitle.TLabel').pack(side='left')
-        selector = ttk.Combobox(quick, state='readonly', values=['12GB', '16GB', '24GB+'], width=12)
-        selector.set(tr('VRAM 容量'))
-        selector.pack(side='right')
-        selector.bind('<<ComboboxSelected>>', lambda e: self.set_preset(selector.get()))
         ttk.Label(info, text=tr('CUDA / bf16 対応の NVIDIA GPU が対象です。VRAM 容量に応じた開始値を選べます。CPU スワップには十分な RAM が必要です。'), style='Hint.TLabel').pack(anchor='w')
-        ttk.Label(info, text=tr('白い欄は直接入力、淡いティールの欄はクリックして選択できます。グレーの欄は現在無効です。'), style='Hint.TLabel').pack(anchor='w', pady=(3, 0))
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill='both', expand=True, padx=24)
         self.pages = {}
@@ -430,7 +445,7 @@ class App(tk.Tk):
                 ttk.Radiobutton(modebar, text=tr('エポック数で指定'), variable=self.stop_mode, value='epochs', command=self.set_stop_mode).pack(side='left', padx=6)
                 resumebar = ttk.Frame(page.body)
                 resumebar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 12))
-                ttk.Button(resumebar, text=tr('保存した state から再開…'), command=self.resume_dialog).pack(side='left')
+                ttk.Button(resumebar, text=tr('stateから再開・追加学習…'), command=self.resume_dialog).pack(side='left')
                 ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
                 ttk.Label(resumebar, text=tr('100 steps ごとに state も保存（初期値）'), style='Hint.TLabel').pack(side='left', padx=8)
                 row = 2
@@ -568,9 +583,33 @@ class App(tk.Tk):
             index = next((i for i, p in enumerate(self.projects) if p['id'] == select_id), 0)
             self.project_combo.current(index)
             self.load_project(self.projects[index])
+        else:
+            self.clear_project()
+
+    def clear_project(self):
+        self.project = self.saved_snapshot = None
+        self.project_combo.set('')
+        self.project_combo.configure(state='disabled')
+        self.start_button.configure(state='disabled')
+        self.delete_button.configure(state='disabled')
+        self.last_folder = None
+        for record in list(self.subset_rows):
+            self.remove_subset(record)
+        for (group, key), var in self.variables.items():
+            var.set(defaults()[group][key])
+        for (group, key), widget in self.texts.items():
+            widget.delete('1.0', 'end')
+            widget.insert('1.0', defaults()[group][key])
+        self.training_progress.reset()
+        self.progress.stop()
+        self.progress_text.set(tr('学習待機中'))
+        self.status.set(tr('プロジェクトがありません。「追加 / コピー」から作成してください。'))
 
     def load_project(self, project):
         self.project = copy.deepcopy(project)
+        self.project_combo.configure(state='disabled' if self.busy else 'readonly')
+        self.start_button.configure(state='disabled' if self.busy else 'normal')
+        self.delete_button.configure(state='disabled' if self.busy else 'normal')
         for (group, key), var in self.variables.items():
             var.set(project['settings'][group][key])
         self.sync_attention()
@@ -591,6 +630,8 @@ class App(tk.Tk):
         self.status.set(tr('{p0}  /  待機中', p0=project['name']))
 
     def collect(self):
+        if self.project is None:
+            raise ValueError(tr('プロジェクトを追加してください'))
         result = copy.deepcopy(self.project)
         result['settings'] = defaults()
         for (group, key), var in self.variables.items():
@@ -637,6 +678,8 @@ class App(tk.Tk):
             return False
 
     def allow_switch(self):
+        if self.project is None:
+            return True
         try:
             dirty = self.collect() != self.saved_snapshot
         except ValueError:
@@ -647,6 +690,8 @@ class App(tk.Tk):
         return True
 
     def switch_project(self, _=None):
+        if not self.projects:
+            return
         index = self.project_combo.current()
         if self.busy or not self.allow_switch():
             self.project_combo.current(next(i for i, p in enumerate(self.projects) if p['id'] == self.project['id']))
@@ -656,6 +701,27 @@ class App(tk.Tk):
     def new_project(self):
         if not self.busy and self.allow_switch():
             ProjectDialog(self)
+
+    def delete_project(self):
+        if self.busy or self.project is None:
+            return
+        project = self.project
+        if not messagebox.askyesno(tr('プロジェクトを削除'), tr('「{p0}」を一覧から削除します。プロジェクトフォルダを削除済みフォルダへ移動します。未保存の変更は破棄されます。外部のモデル・画像は移動しません。', p0=project['name']), parent=self):
+            return
+        try:
+            destination = self.store.remove(project)
+            self.step_memory.pop(project['id'], None)
+            remaining = self.store.list()
+            if not remaining:
+                self.last_model_settings = copy.deepcopy(project['settings']['model'])
+                self.preferences.update(empty_projects=True, last_model_settings=self.last_model_settings)
+                self.save_ui_preferences()
+                self.refresh_projects()
+            else:
+                self.refresh_projects(remaining[0]['id'])
+            self.status.set(tr('プロジェクトを削除済みフォルダへ移動しました: {p0}', p0=destination))
+        except (ValueError, OSError) as exc:
+            messagebox.showerror(tr('プロジェクトを削除できません'), str(exc), parent=self)
 
     def set_preset(self, name):
         s = defaults()
@@ -673,6 +739,8 @@ class App(tk.Tk):
         self.memory_summary.set(tr('DiT {p0} / Qwen {p1}  ·  CPU swap {p2}  ·  batch {p3}  ·  DiT のみ学習', p0=dit, p1=te, p2=blocks, p3=batch))
 
     def set_stop_mode(self):
+        if self.project is None:
+            return
         var = self.variables[('training', 'max_train_steps')]
         pid = self.project['id']
         if self.stop_mode.get() == 'epochs':
@@ -697,7 +765,7 @@ class App(tk.Tk):
         self.field_widgets[('training', 'max_train_epochs')].configure(state='normal' if steps == 0 else 'disabled')
 
     def resume_dialog(self):
-        if not self.busy:
+        if not self.busy and self.project is not None:
             ResumeDialog(self)
 
     def clear_resume(self):
@@ -806,10 +874,11 @@ class App(tk.Tk):
     def set_busy(self, busy, text):
         self.busy = busy
         self.language_combo.configure(state='disabled' if busy else 'readonly')
-        self.start_button.configure(state='disabled' if busy else 'normal')
+        self.start_button.configure(state='disabled' if busy or self.project is None else 'normal')
         self.new_button.configure(state='disabled' if busy else 'normal')
+        self.delete_button.configure(state='disabled' if busy or self.project is None else 'normal')
         self.import_button.configure(state='disabled' if busy else 'normal')
-        self.project_combo.configure(state='disabled' if busy else 'readonly')
+        self.project_combo.configure(state='disabled' if busy or not self.projects else 'readonly')
         self.stop_button.configure(state='normal' if self.runner.running else 'disabled')
         self.status.set(text)
         if busy:
@@ -833,7 +902,7 @@ class App(tk.Tk):
             self.language_choice.set('日本語' if self.language == 'ja' else 'English')
             return
         try:
-            current = self.collect()
+            current = self.collect() if self.project is not None else None
         except ValueError as exc:
             self.language_choice.set('日本語' if self.language == 'ja' else 'English')
             messagebox.showerror(tr('設定の確認'), str(exc), parent=self)
@@ -853,8 +922,9 @@ class App(tk.Tk):
         self.variables, self.texts, self.field_widgets = {}, {}, {}
         self.subset_rows = []
         self.build()
-        self.refresh_projects(current['id'])
-        self.load_project(current)
+        self.refresh_projects(current['id'] if current else None)
+        if current:
+            self.load_project(current)
         self.saved_snapshot = saved
         self.notebook.select(tab)
         self.append_log(log)
@@ -1129,7 +1199,8 @@ class App(tk.Tk):
             messagebox.showerror(tr('フォルダ'), str(exc), parent=self)
 
     def open_project(self):
-        self.open_folder(self.store.directory(self.project))
+        if self.project is not None:
+            self.open_folder(self.store.directory(self.project))
 
     def open_run(self):
         if self.last_folder:
@@ -1138,6 +1209,9 @@ class App(tk.Tk):
             messagebox.showinfo(tr('実行フォルダ'), tr('このプロジェクトにはまだ実行履歴がありません。'), parent=self)
 
     def history(self):
+        if self.project is None:
+            self.show_text(tr('実行履歴'), tr('まだ実行履歴はありません。'))
+            return
         folder = self.store.directory(self.project) / 'runs'
         lines = []
         for run in sorted(folder.glob('*'), reverse=True):

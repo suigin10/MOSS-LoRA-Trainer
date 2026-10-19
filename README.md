@@ -1,8 +1,10 @@
 # MOSS Studio — MOSS-Image LoRA Trainer
 
-**MOSS-ImageのLoRA学習を、プロジェクト作成から実行・再開まで操作できるWindows向け日本語GUIです。** 学習エンジンには [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts) を使用します。
+**MOSS-ImageのLoRA学習を、プロジェクト作成から実行・再開まで操作できるWindows向け日本語 / English対応GUIです。** 学習エンジンには [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts) を使用します。
 
-A Japanese desktop GUI for MOSS-Image LoRA training on Windows. Includes isolated backend setup, project management, VRAM presets, resume support, and an estimated completion time.
+A Japanese / English desktop GUI for MOSS-Image LoRA training on Windows. Includes isolated backend setup, project management, VRAM presets, resume support, and an estimated completion time. Choose **English** in the header to switch languages. See the [English quick start](docs/QUICK_START.en.md).
+
+**0.1.1rc5 プレビュー版**には、ホイール操作修正・再開修正・英語GUI・モデル引継ぎ・Caption確認・state保持設定が含まれます。同梱の「再開修正の確認手順.txt」を参照してください。今回の再開修正のMOSS実モデルでのGPU検証は確認待ちです。
 
 > **初期プレビュー版**：RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）。GUI・設定・導入制御などの自動テストも実施しています。検証範囲は [VALIDATION.md](VALIDATION.md) を参照してください。
 
@@ -31,6 +33,8 @@ VRAMだけで動作を保証するものではありません。画像解像度�
 ## 主な機能
 
 - モデルと画像をWindowsのファイル／フォルダ選択ダイアログから指定
+- ヘッダーで日本語 / Englishを切り替え。選択言語を次回起動時にも維持
+- デフォルト新規プロジェクトでも現在のモデル設定を引継ぎ。Caption認識数・ファイル名の対応とUTF-8エラーを確認可能
 - 初期値からの新規プロジェクト作成、既存プロジェクトの設定コピー
 - STEP数／エポック数の切り替え、設定の保存・書き出し・読み込み
 - VRAM容量別のプリセット、設定の競合チェック
@@ -45,7 +49,7 @@ VRAMだけで動作を保証するものではありません。画像解像度�
 | 学習上限 | 1,500 STEP（直接変更可能） |
 | 学習率 / Rank / Alpha | 1e-4 / 16 / 1 |
 | Optimizer / scheduler | AdamW8bit / constant |
-| 保存 | 100 STEPごと、再開用stateも保存 |
+| 保存 | LoRAは100 STEPごと（変更可能）。stateは最新1つを保持、正常終了時にも保存 |
 | 解像度 / batch | 1024 / 1 |
 | 12GB向け設定 | DiT・QwenともConvRot INT8、block swap 20、ディスクキャッシュ |
 | サンプル生成 | 初期OFF。1024×1024、50 steps、CFG 3、生成shift 5 |

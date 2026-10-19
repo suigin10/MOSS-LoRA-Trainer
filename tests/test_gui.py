@@ -25,6 +25,52 @@ class GuiTests(unittest.TestCase):
         self.app.set_preset('12GB')
         self.assertTrue(self.app.collect()['settings']['memory']['convrot_int8'])
 
+    def test_wheel_over_choices_scrolls_page_without_changing_training_values(self):
+        for group, key in [('training', 'optimizer_type'), ('training', 'lr_scheduler'),
+                           ('memory', 'attn_mode'), ('flow', 'timestep_sampling')]:
+            with self.subTest(group=group, key=key):
+                page = self.app.pages[group]
+                self.app.notebook.select(page)
+                self.app.update()
+                page.canvas.yview_moveto(0)
+                before = page.canvas.yview()
+                widget = self.app.field_widgets[(group, key)]
+                original = widget.get()
+                widget.event_generate('<MouseWheel>', delta=-120, x=5, y=5)
+                self.app.update()
+                self.assertEqual(widget.get(), original)
+                self.assertGreater(page.canvas.yview()[0], before[0])
+                widget.event_generate('<MouseWheel>', delta=120, x=5, y=5)
+                self.app.update()
+                self.assertEqual(widget.get(), original)
+
+    def test_posted_choice_list_still_allows_selection(self):
+        widget = self.app.field_widgets[('training', 'optimizer_type')]
+        self.app.notebook.select(self.app.pages['training'])
+        self.app.update()
+        widget.tk.call('ttk::combobox::Post', str(widget))
+        try:
+            popup = str(widget.tk.call('ttk::combobox::PopdownWindow', str(widget)))
+            listing = popup + '.f.l'
+            widget.tk.call(listing, 'selection', 'clear', 0, 'end')
+            widget.tk.call(listing, 'selection', 'set', 1)
+            widget.tk.call('ttk::combobox::LBSelected', listing)
+            self.app.update()
+            self.assertEqual(widget.get(), 'AdamW')
+        finally:
+            widget.tk.call('ttk::combobox::Unpost', str(widget))
+
+    def test_wheel_over_header_choice_does_not_change_project_or_scroll_page(self):
+        page = self.app.pages['training']
+        self.app.notebook.select(page)
+        self.app.update()
+        before = page.canvas.yview()
+        project = self.app.project_combo.get()
+        self.app.project_combo.event_generate('<MouseWheel>', delta=-120)
+        self.app.update()
+        self.assertEqual(self.app.project_combo.get(), project)
+        self.assertEqual(page.canvas.yview(), before)
+
     def test_xformers_automatically_enables_required_split_attention(self):
         self.app.variables[('memory', 'attn_mode')].set('xformers')
         self.assertTrue(self.app.collect()['settings']['memory']['split_attn'])
@@ -76,6 +122,19 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.app.project_combo.instate(['disabled']))
         self.app.set_busy(False, '待機')
         self.assertFalse(self.app.start_button.instate(['disabled']))
+
+    def test_default_project_keeps_current_models_with_fresh_training_settings(self):
+        self.app.variables[('model', 'vae')].set('D:/models/vae.safetensors')
+        self.app.variables[('model', 'text_encoder')].set('D:/models/qwen.safetensors')
+        self.app.variables[('training', 'learning_rate')].set('0.02')
+        dialog = ProjectDialog(self.app)
+        dialog.name.set('モデルを保持した新規')
+        dialog.create()
+        project = self.app.collect()
+        self.assertEqual(project['settings']['model']['vae'], 'D:/models/vae.safetensors')
+        self.assertEqual(project['settings']['model']['text_encoder'], 'D:/models/qwen.safetensors')
+        self.assertEqual(project['settings']['training']['learning_rate'], 0.0001)
+        self.assertEqual(project['subsets'][0]['image_dir'], '')
 
     def test_training_and_sample_defaults(self):
         p = self.app.collect()
@@ -134,6 +193,40 @@ class GuiTests(unittest.TestCase):
         self.app.poll()
         self.assertFalse(self.app.busy)
         self.assertEqual(self.app.env, fresh)
+
+    def test_resume_dialog_footer_is_visible_with_small_window_and_long_detail(self):
+        dialog = ResumeDialog(self.app)
+        self.addCleanup(dialog.destroy)
+        dialog.geometry('640x420')
+        dialog.detail.set(('長いフォルダ名 / ' * 100) + '\n' * 30)
+        self.app.update()
+        button = dialog.apply_button
+        self.assertTrue(button.winfo_ismapped())
+        self.assertLessEqual(button.winfo_rooty() + button.winfo_height(), dialog.winfo_rooty() + dialog.winfo_height())
+        self.assertGreaterEqual(button.winfo_rooty(), dialog.winfo_rooty())
+        for scaling in (1.5, 2.0):
+            self.app.tk.call('tk', 'scaling', scaling)
+            self.app.update()
+            for child in dialog.controls.winfo_children():
+                self.assertGreaterEqual(child.winfo_rootx(), dialog.winfo_rootx())
+                self.assertLessEqual(child.winfo_rootx() + child.winfo_width(), dialog.winfo_rootx() + dialog.winfo_width())
+
+    def test_resume_dialog_preserves_epoch_mode(self):
+        source = self.app.collect()
+        source['settings']['training'].update(max_train_steps=0, max_train_epochs=10)
+        run = self.app.store.directory(self.app.project) / 'runs' / 'epoch-fixture'
+        state = run / 'models' / 'epoch-state'
+        state.mkdir(parents=True)
+        atomic_json(run / 'project_snapshot.json', source)
+        atomic_json(state / 'train_state.json', {'current_step': 100, 'current_epoch': 1})
+        for name in ('model.safetensors', 'optimizer.bin', 'scheduler.bin', 'random_states_0.pkl'):
+            (state / name).write_bytes(b'fixture-only')
+        dialog = ResumeDialog(self.app)
+        self.assertEqual(dialog.target.get(), '10')
+        dialog.apply()
+        training = self.app.collect()['settings']['training']
+        self.assertEqual(training['max_train_steps'], 0)
+        self.assertEqual(training['max_train_epochs'], 10)
 
     def test_import_dialog_keeps_original_project_and_local_environment(self):
         source = self.app.collect()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .i18n import tr
+
 import copy
 import json
 import math
@@ -55,6 +57,7 @@ FIELDS = {
         'save_every_n_epochs': ('何エポックごとに保存（0: 無効）', 0, None, ''),
         'save_every_n_steps': ('何 steps ごとに保存（0: 無効）', 100, None, '初期値 100。自由に変更できます'),
         'save_state': ('再開用の optimizer state も保存', True, None, 'モデルの保存間隔に合わせて保存。ディスク使用量が増えます'),
+        'keep_latest_state_only': ('state は最新の1つだけ保持', True, None, '新しいstateの保存成功後に、この実行で作成した古いstateだけを削除。LoRAは削除しません'),
         'save_state_on_train_end': ('正常終了時にも state を保存', True, None, '強制停止時には保存できません。直近の保存済み state から再開'),
         'skip_until_initial_step': ('再開時に処理済みバッチをスキップ', True, None, 'state の進捗とデータ位置を引き継ぐため通常 ON'),
         'seed': ('乱数 seed', 42, None, ''),
@@ -145,16 +148,20 @@ class ProjectStore:
     def directory(self, project):
         pid = project['id']
         if not re.fullmatch(r'[a-f0-9]{32}', pid):
-            raise ValueError('プロジェクト ID が不正です')
+            raise ValueError(tr('プロジェクト ID が不正です'))
         return self.root / pid
 
-    def create(self, name, source=None, *, preserve_output_name=False):
+    def create(self, name, source=None, *, preserve_output_name=False, model_settings=None):
         name = name.strip()
         if not name or len(name) > 100:
-            raise ValueError('名前は 1〜100 文字で入力してください')
+            raise ValueError(tr('名前は 1〜100 文字で入力してください'))
         if any(p['name'].casefold() == name.casefold() for p in self.list()):
-            raise ValueError('同じ名前のプロジェクトがあります')
+            raise ValueError(tr('同じ名前のプロジェクトがあります'))
         settings = copy.deepcopy(source['settings']) if source else defaults()
+        if source is None and model_settings is not None:
+            # Keep the selected models while starting a fresh training plan.
+            settings['model'] = {key: copy.deepcopy(model_settings.get(key, spec[1]))
+                                 for key, spec in FIELDS['model'].items()}
         # Source paths are settings; run identity, state and results never carry over.
         settings['training'].update(resume='', network_weights='')
         if not preserve_output_name:
@@ -171,30 +178,30 @@ class ProjectStore:
     def load(self, path):
         p = json.loads(Path(path).read_text(encoding='utf-8'))
         if not isinstance(p, dict) or p.get('schema_version') != SCHEMA_VERSION:
-            raise ValueError('未対応のプロジェクト形式です')
+            raise ValueError(tr('未対応のプロジェクト形式です'))
         if not isinstance(p.get('id'), str):
-            raise ValueError('プロジェクト ID が不正です')
+            raise ValueError(tr('プロジェクト ID が不正です'))
         self.directory(p)
         if not isinstance(p.get('name'), str) or not p['name'].strip() or len(p['name']) > 100 or not isinstance(p.get('subsets'), list) or not isinstance(p.get('settings'), dict):
-            raise ValueError('プロジェクト形式が不正です')
+            raise ValueError(tr('プロジェクト形式が不正です'))
         for sub in p['subsets']:
             if not isinstance(sub, dict) or set(sub) - {'image_dir', 'num_repeats', 'class_tokens'}:
-                raise ValueError('画像サブセットの形式が不正です')
+                raise ValueError(tr('画像サブセットの形式が不正です'))
             if not isinstance(sub.get('image_dir'), str) or type(sub.get('num_repeats')) is not int or not isinstance(sub.get('class_tokens'), str):
-                raise ValueError('画像サブセットの型が不正です')
+                raise ValueError(tr('画像サブセットの型が不正です'))
         # Missing known fields get defaults; unknown fields are rejected, never silently launched.
         merged = defaults()
         for group, values in p['settings'].items():
             if group not in merged or not isinstance(values, dict):
-                raise ValueError(f'不明な設定: {group}')
+                raise ValueError(tr('不明な設定: {p0}', p0=group))
             for key, value in values.items():
                 if key not in merged[group]:
-                    raise ValueError(f'不明な設定: {key}')
+                    raise ValueError(tr('不明な設定: {p0}', p0=key))
                 expected = type(merged[group][key])
                 if type(value) is not expected and not (expected is float and type(value) is int):
-                    raise ValueError(f'設定の型が不正: {key}')
+                    raise ValueError(tr('設定の型が不正: {p0}', p0=key))
                 if expected in (int, float) and not math.isfinite(value):
-                    raise ValueError(f'設定に非有限数は使えません: {key}')
+                    raise ValueError(tr('設定に非有限数は使えません: {p0}', p0=key))
                 merged[group][key] = value
         p['settings'] = merged
         return p
@@ -217,104 +224,104 @@ def validate(project, env=None, files=False):
         for key, (_, default, choices, _) in fields.items():
             value = s[group][key]
             if type(default) in (int, float):
-                require(type(value) in (int, float) and math.isfinite(value), f'{key}: 有限の数値が必要です')
+                require(type(value) in (int, float) and math.isfinite(value), tr('{p0}: 有限の数値が必要です', p0=key))
                 if type(default) is int:
-                    require(type(value) is int, f'{key}: 整数が必要です')
+                    require(type(value) is int, tr('{p0}: 整数が必要です', p0=key))
             if isinstance(choices, list):
-                require(value in choices, f'{key}: 選択肢が不正です')
+                require(value in choices, tr('{p0}: 選択肢が不正です', p0=key))
     if errors:
         return errors
     d, t, m, f = (s[k] for k in ('dataset', 'training', 'memory', 'flow'))
     for key in ('resolution', 'bucket_reso_steps', 'min_bucket_reso', 'max_bucket_reso'):
-        require(d[key] >= 16 and d[key] % 16 == 0, f'{key}: 16 以上の 16 の倍数にしてください')
-    require(d['min_bucket_reso'] <= d['max_bucket_reso'], 'Bucket 最小値は最大値以下にしてください')
+        require(d[key] >= 16 and d[key] % 16 == 0, tr('{p0}: 16 以上の 16 の倍数にしてください', p0=key))
+    require(d['min_bucket_reso'] <= d['max_bucket_reso'], tr('Bucket 最小値は最大値以下にしてください'))
     for key in ('min_bucket_reso', 'max_bucket_reso'):
-        require(d[key] % d['bucket_reso_steps'] == 0, f'{key}: Bucket 刻みの倍数にしてください')
-    require(d['batch_size'] >= 1, 'バッチサイズは 1 以上にしてください')
-    require(1 <= s['model']['moss_max_token_length'] <= 4096, '最大トークン数は 1〜4096 にしてください')
+        require(d[key] % d['bucket_reso_steps'] == 0, tr('{p0}: Bucket 刻みの倍数にしてください', p0=key))
+    require(d['batch_size'] >= 1, tr('バッチサイズは 1 以上にしてください'))
+    require(1 <= s['model']['moss_max_token_length'] <= 4096, tr('最大トークン数は 1〜4096 にしてください'))
     for key in ('network_dim', 'network_alpha', 'learning_rate', 'max_train_epochs', 'gradient_accumulation_steps'):
-        require(t[key] > 0, f'{key}: 0 より大きい値が必要です')
+        require(t[key] > 0, tr('{p0}: 0 より大きい値が必要です', p0=key))
     for key in ('max_train_steps', 'lr_warmup_steps', 'save_every_n_steps', 'save_every_n_epochs', 'max_grad_norm', 'seed'):
-        require(t[key] >= 0, f'{key}: 0 以上にしてください')
-    require(bool(re.fullmatch(r'[^<>:"/\\|?*\x00-\x1f]+', t['output_name'])) and t['output_name'] not in ('.', '..') and not t['output_name'].endswith((' ', '.')), '出力 LoRA 名に使用できない文字があります')
-    require(not re.fullmatch(r'(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?', t['output_name']), 'Windows の予約名は出力名に使用できません')
-    require(d['caption_extension'].startswith('.') and not re.search(r'[/\\\s]', d['caption_extension']), 'キャプション拡張子は .txt の形式で入力してください')
+        require(t[key] >= 0, tr('{p0}: 0 以上にしてください', p0=key))
+    require(bool(re.fullmatch(r'[^<>:"/\\|?*\x00-\x1f]+', t['output_name'])) and t['output_name'] not in ('.', '..') and not t['output_name'].endswith((' ', '.')), tr('出力 LoRA 名に使用できない文字があります'))
+    require(not re.fullmatch(r'(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?', t['output_name']), tr('Windows の予約名は出力名に使用できません'))
+    require(d['caption_extension'].startswith('.') and not re.search(r'[/\\\s]', d['caption_extension']), tr('キャプション拡張子は .txt の形式で入力してください'))
     for group, key in (('dataset', 'caption_dropout_rate'), ('flow', 'rank_dropout'), ('flow', 'module_dropout')):
-        require(0 <= s[group][key] <= 1, f'{key}: 0〜1 にしてください')
-    require(0 <= m['blocks_to_swap'] <= 40, 'Block swap は 0〜40 にしてください')
+        require(0 <= s[group][key] <= 1, tr('{p0}: 0〜1 にしてください', p0=key))
+    require(0 <= m['blocks_to_swap'] <= 40, tr('Block swap は 0〜40 にしてください'))
     modes = sum([m['blocks_to_swap'] > 0, m['cpu_offload_checkpointing'], m['unsloth_offload_checkpointing']])
-    require(modes <= 1, 'Block swap / CPU offload / Unsloth はいずれか 1 つだけ選んでください')
-    require(not (m['cache_latents_to_disk'] and not m['cache_latents']), 'ディスク Latent キャッシュには Latent キャッシュを ON にしてください')
-    require(not (m['cache_text_encoder_outputs_to_disk'] and not m['cache_text_encoder_outputs']), 'ディスク TE キャッシュにはテキスト出力キャッシュを ON にしてください')
-    require(not (m['cache_latents'] and (d['color_aug'] or d['random_crop'])), 'Latent キャッシュと色拡張 / ランダムクロップは併用できません')
-    require(not (m['cache_text_encoder_outputs'] and d['shuffle_caption']), 'TE キャッシュとキャプションシャッフルは併用できません')
-    require(m['max_data_loader_n_workers'] >= 0, 'DataLoader workers は 0 以上にしてください')
-    require(not (m['max_data_loader_n_workers'] == 0 and m['persistent_data_loader_workers']), 'workers=0 の場合は worker 維持を OFF にしてください')
-    require(m['attn_mode'] != 'xformers' or m['split_attn'], 'xformers には Split attention が必要です')
+    require(modes <= 1, tr('Block swap / CPU offload / Unsloth はいずれか 1 つだけ選んでください'))
+    require(not (m['cache_latents_to_disk'] and not m['cache_latents']), tr('ディスク Latent キャッシュには Latent キャッシュを ON にしてください'))
+    require(not (m['cache_text_encoder_outputs_to_disk'] and not m['cache_text_encoder_outputs']), tr('ディスク TE キャッシュにはテキスト出力キャッシュを ON にしてください'))
+    require(not (m['cache_latents'] and (d['color_aug'] or d['random_crop'])), tr('Latent キャッシュと色拡張 / ランダムクロップは併用できません'))
+    require(not (m['cache_text_encoder_outputs'] and d['shuffle_caption']), tr('TE キャッシュとキャプションシャッフルは併用できません'))
+    require(m['max_data_loader_n_workers'] >= 0, tr('DataLoader workers は 0 以上にしてください'))
+    require(not (m['max_data_loader_n_workers'] == 0 and m['persistent_data_loader_workers']), tr('workers=0 の場合は worker 維持を OFF にしてください'))
+    require(m['attn_mode'] != 'xformers' or m['split_attn'], tr('xformers には Split attention が必要です'))
     for key in ('logit_std', 'discrete_flow_shift', 'sigmoid_scale', 'mode_scale', 'embedder_lr'):
-        require(f[key] > 0, f'{key}: 0 より大きい値が必要です')
+        require(f[key] > 0, tr('{p0}: 0 より大きい値が必要です', p0=key))
     for key in ('exclude_patterns', 'include_patterns'):
         for pattern in f[key].splitlines():
             try:
                 re.compile(pattern)
             except re.error as exc:
-                errors.append(f'{key}: 正規表現が不正: {exc}')
+                errors.append(tr('{p0}: 正規表現が不正: {p1}', p0=key, p1=exc))
     for key in ('network_reg_dims', 'network_reg_lrs'):
         for item in filter(None, f[key].split(',')):
             try:
                 pattern, value = item.rsplit('=', 1)
                 re.compile(pattern)
                 number = int(value) if key.endswith('dims') else float(value)
-                require(math.isfinite(number) and number > 0, f'{key}: 正数を指定してください')
+                require(math.isfinite(number) and number > 0, tr('{p0}: 正数を指定してください', p0=key))
             except (ValueError, re.error):
-                errors.append(f'{key}: pattern=値 の形式を確認してください')
+                errors.append(tr('{p0}: pattern=値 の形式を確認してください', p0=key))
     if s['samples']['enabled']:
-        require(any(line.strip() and not line.strip().startswith('#') for line in s['samples']['prompts'].splitlines()), 'サンプルプロンプトを入力してください')
-        require(s['samples']['sample_every_n_epochs'] >= 0 and s['samples']['sample_every_n_steps'] >= 0 and (s['samples']['sample_every_n_epochs'] > 0 or s['samples']['sample_every_n_steps'] > 0), 'サンプル生成間隔を steps または epoch で 1 以上にしてください')
+        require(any(line.strip() and not line.strip().startswith('#') for line in s['samples']['prompts'].splitlines()), tr('サンプルプロンプトを入力してください'))
+        require(s['samples']['sample_every_n_epochs'] >= 0 and s['samples']['sample_every_n_steps'] >= 0 and (s['samples']['sample_every_n_epochs'] > 0 or s['samples']['sample_every_n_steps'] > 0), tr('サンプル生成間隔を steps または epoch で 1 以上にしてください'))
         layers = s['samples']['sample_uncond_skip_layers']
-        require(not layers or all(x.strip().isdigit() and 0 <= int(x) <= 41 for x in layers.split(',')), 'Skip layers は 0〜41 のカンマ区切りにしてください')
+        require(not layers or all(x.strip().isdigit() and 0 <= int(x) <= 41 for x in layers.split(',')), tr('Skip layers は 0〜41 のカンマ区切りにしてください'))
     sample = s['samples']
     for key in ('width', 'height'):
-        require(sample[key] >= 16 and sample[key] % 16 == 0, f'生成 {key}: 16 以上の 16 の倍数にしてください')
-    require(sample['infer_steps'] >= 1, '生成ステップ数は 1 以上にしてください')
-    require(sample['cfg'] >= 0 and sample['flow_shift'] > 0 and sample['sample_seed'] >= 0, '生成 CFG / seed は 0 以上、生成 shift は正数にしてください')
-    require(not re.search(r'[\r\n]|--', sample['negative_prompt']), '共通 Negative prompt に改行や -- は使用できません')
-    require(bool(project['subsets']), '画像サブセットを 1 件以上追加してください')
+        require(sample[key] >= 16 and sample[key] % 16 == 0, tr('生成 {p0}: 16 以上の 16 の倍数にしてください', p0=key))
+    require(sample['infer_steps'] >= 1, tr('生成ステップ数は 1 以上にしてください'))
+    require(sample['cfg'] >= 0 and sample['flow_shift'] > 0 and sample['sample_seed'] >= 0, tr('生成 CFG / seed は 0 以上、生成 shift は正数にしてください'))
+    require(not re.search(r'[\r\n]|--', sample['negative_prompt']), tr('共通 Negative prompt に改行や -- は使用できません'))
+    require(bool(project['subsets']), tr('画像サブセットを 1 件以上追加してください'))
     for i, sub in enumerate(project['subsets'], 1):
-        require(type(sub.get('num_repeats')) is int and sub['num_repeats'] >= 1, f'サブセット {i}: repeat は 1 以上の整数です')
-        require(bool(sub.get('image_dir', '').strip()), f'サブセット {i}: 画像フォルダを指定してください')
+        require(type(sub.get('num_repeats')) is int and sub['num_repeats'] >= 1, tr('サブセット {p0}: repeat は 1 以上の整数です', p0=i))
+        require(bool(sub.get('image_dir', '').strip()), tr('サブセット {p0}: 画像フォルダを指定してください', p0=i))
         if files and sub.get('image_dir'):
             path = Path(sub['image_dir'])
-            require(path.is_absolute() and path.is_dir(), f'画像フォルダが存在しません（絶対パス）: {path}')
+            require(path.is_absolute() and path.is_dir(), tr('画像フォルダが存在しません（絶対パス）: {p0}', p0=path))
             if path.is_dir():
-                require(any(p.suffix.lower() in IMAGE_EXTENSIONS for p in path.iterdir() if p.is_file()), f'画像がありません: {path}（サブフォルダは自動再帰しません）')
+                require(any(p.suffix.lower() in IMAGE_EXTENSIONS for p in path.iterdir() if p.is_file()), tr('画像がありません: {p0}（サブフォルダは自動再帰しません）', p0=path))
     if files:
         env = env or ENV_DEFAULTS
-        require(Path(env['python']).is_file() and Path(env['python']).is_absolute(), '学習用 Python の実行ファイルを絶対パスで指定してください')
-        require(Path(env['sd_scripts']).is_absolute() and (Path(env['sd_scripts']) / 'moss_image_train_network.py').is_file(), 'MOSS 対応の sd-scripts フォルダを指定してください')
+        require(Path(env['python']).is_file() and Path(env['python']).is_absolute(), tr('学習用 Python の実行ファイルを絶対パスで指定してください'))
+        require(Path(env['sd_scripts']).is_absolute() and (Path(env['sd_scripts']) / 'moss_image_train_network.py').is_file(), tr('MOSS 対応の sd-scripts フォルダを指定してください'))
         for key in ('pretrained_model_name_or_path', 'text_encoder', 'vae'):
             path = Path(s['model'][key])
-            require(bool(s['model'][key]) and path.is_absolute() and path.is_file(), f'{FIELDS["model"][key][0]}: モデルファイルを絶対パスで指定してください')
+            require(bool(s['model'][key]) and path.is_absolute() and path.is_file(), tr('{p0}: モデルファイルを絶対パスで指定してください', p0=tr(FIELDS['model'][key][0])))
             match = re.search(r'-(\d{5})-of-(\d{5})\.safetensors$', path.name)
             if match:
-                require(int(match[1]) == 1, f'{key}: 最初の shard を指定してください')
+                require(int(match[1]) == 1, tr('{p0}: 最初の shard を指定してください', p0=key))
                 for n in range(1, int(match[2]) + 1):
                     shard = path.with_name(path.name[:match.start()] + f'-{n:05d}-of-{int(match[2]):05d}.safetensors')
-                    require(shard.is_file(), f'分割モデルが不足: {shard.name}')
-        require('gptq' not in s['model']['text_encoder'].lower(), 'GPTQ 形式の Qwen は非対応です。bf16 / ConvRot INT8 を指定してください')
+                    require(shard.is_file(), tr('分割モデルが不足: {p0}', p0=shard.name))
+        require('gptq' not in s['model']['text_encoder'].lower(), tr('GPTQ 形式の Qwen は非対応です。bf16 / ConvRot INT8 を指定してください'))
         for group, key in (('model', 'tokenizer_cache_dir'), ('training', 'resume'), ('training', 'network_weights')):
             value = s[group][key]
-            require(not value or (Path(value).is_absolute() and (Path(value).is_file() if key == 'network_weights' else Path(value).is_dir())), f'{key}: パスが存在しません（絶対パス）')
+            require(not value or (Path(value).is_absolute() and (Path(value).is_file() if key == 'network_weights' else Path(value).is_dir())), tr('{p0}: パスが存在しません（絶対パス）', p0=key))
     if t['resume']:
-        require(not t['network_weights'], 'state からの再開と初期 LoRA 重みは同時に指定しないでください')
+        require(not t['network_weights'], tr('state からの再開と初期 LoRA 重みは同時に指定しないでください'))
         if files:
             info = state_info(t['resume'])
             errors.extend(info['errors'])
             if not info['errors']:
                 if t['max_train_steps']:
-                    require(t['max_train_steps'] > info['step'], f'総 STEP 上限は保存済み {info["step"]} steps より大きくしてください（追加 STEP 数ではありません）')
+                    require(t['max_train_steps'] > info['step'], tr('総 STEP 上限は保存済み {p0} steps より大きくしてください（追加 STEP 数ではありません）', p0=info['step']))
                 else:
-                    require(t['max_train_epochs'] > info['epoch'], f'再開時の総エポック数は保存済み epoch {info["epoch"]} より大きくしてください')
+                    require(t['max_train_epochs'] >= info['epoch'], tr('再開時の総エポック数は保存済み epoch {p0} 以上にしてください（同じエポックの途中から再開可能）', p0=info['epoch']))
                 errors.extend(resume_differences(project, info))
     return errors
 
@@ -325,32 +332,32 @@ def state_info(folder):
     try:
         metadata = json.loads((folder / 'train_state.json').read_text(encoding='utf-8'))
         if type(metadata['current_step']) is not int or metadata['current_step'] < 0 or type(metadata['current_epoch']) is not int or metadata['current_epoch'] < 0:
-            raise ValueError('step / epoch が不正です')
+            raise ValueError(tr('step / epoch が不正です'))
         info.update(step=metadata['current_step'], epoch=metadata['current_epoch'])
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        info['errors'].append(f'state の進捗情報を読めません: {exc}')
+        info['errors'].append(tr('state の進捗情報を読めません: {p0}', p0=exc))
     # Inspect structure only; do not deserialize pickle/optimizer files in the GUI.
     for label, patterns in [('LoRA model', ('model*.safetensors', 'pytorch_model*.bin')),
                             ('optimizer', ('optimizer*.bin',)), ('scheduler', ('scheduler*.bin',)),
-                            ('乱数状態', ('random_states_*.pkl',))]:
+                            (tr('乱数状態'), ('random_states_*.pkl',))]:
         try:
             found = any(p.is_file() and p.stat().st_size > 0 for pattern in patterns for p in folder.glob(pattern))
         except OSError:
             found = False
         if not found:
-            info['errors'].append(f'state の {label} ファイルが不足 / 空です: {folder}')
+            info['errors'].append(tr('state の {p0} ファイルが不足 / 空です: {p1}', p0=label, p1=folder))
     snapshot = folder.parent.parent / 'project_snapshot.json'
     if snapshot.exists():
         try:
             saved = json.loads(snapshot.read_text(encoding='utf-8'))
             if saved.get('schema_version') != SCHEMA_VERSION or not isinstance(saved.get('settings'), dict) or not isinstance(saved.get('subsets'), list):
-                raise ValueError('未対応の snapshot 形式です')
+                raise ValueError(tr('未対応の snapshot 形式です'))
             for group, values in saved['settings'].items():
                 if group not in FIELDS or not isinstance(values, dict) or any(key not in FIELDS[group] for key in values):
-                    raise ValueError('snapshot の設定形式が不正です')
+                    raise ValueError(tr('snapshot の設定形式が不正です'))
             info['snapshot'] = saved
         except (OSError, ValueError) as exc:
-            info['errors'].append(f'再開元の設定を読めません: {exc}')
+            info['errors'].append(tr('再開元の設定を読めません: {p0}', p0=exc))
     return info
 
 
@@ -363,14 +370,15 @@ def resume_differences(project, info):
         'model': tuple(FIELDS['model']), 'dataset': tuple(FIELDS['dataset']),
         'flow': tuple(FIELDS['flow']),
         'training': ('network_dim', 'network_alpha', 'optimizer_type', 'lr_scheduler', 'learning_rate',
-                     'lr_warmup_steps', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
+                     'lr_warmup_steps', 'gradient_accumulation_steps', 'max_grad_norm', 'seed',
+                     'max_train_steps', 'max_train_epochs'),
     }.items():
         for key in keys:
             original = source['settings'].get(group, {}).get(key, FIELDS[group][key][1])
             if project['settings'][group][key] != original:
-                differences.append(f'state 再開の設定差: {FIELDS[group][key][0]}。元設定を復元するか、LoRA 重みから追加学習してください')
+                differences.append(tr('state 再開の設定差: {p0}。元設定を復元するか、LoRA 重みから追加学習してください', p0=tr(FIELDS[group][key][0])))
     if project['subsets'] != source['subsets']:
-        differences.append('state 再開の設定差: 画像サブセット。元の画像パス・repeat・class tokens に戻してください')
+        differences.append(tr('state 再開の設定差: 画像サブセット。元の画像パス・repeat・class tokens に戻してください'))
     return differences
 
 
@@ -389,7 +397,7 @@ def toml_value(value):
     if isinstance(value, (str, list)):
         return json.dumps(value, ensure_ascii=False)
     if not math.isfinite(value):
-        raise ValueError('TOML に非有限数は使用できません')
+        raise ValueError(tr('TOML に非有限数は使用できません'))
     return str(value)
 
 
@@ -418,6 +426,7 @@ def training_config(project, run_dir):
               'log_with': 'tensorboard', 'dataset_config': str(run_dir / 'dataset.toml')}
     for group in ('model', 'training', 'memory'):
         config.update({k: v for k, v in s[group].items() if v != ''})
+    config.pop('keep_latest_state_only', None)
     if not s['training']['resume']:
         config.pop('skip_until_initial_step', None)
     if config['max_train_steps'] > 0:
@@ -478,7 +487,9 @@ def sample_prompts_text(settings):
 def command(env, run_dir):
     return [env['python'], '-u', '-m', 'accelerate.commands.launch', '--num_processes', '1',
             '--num_machines', '1', '--mixed_precision', 'bf16', '--dynamo_backend', 'no',
-            '--num_cpu_threads_per_process', '1', str(Path(env['sd_scripts']).resolve() / 'moss_image_train_network.py'),
+            '--num_cpu_threads_per_process', '1', str(Path(__file__).resolve().with_name('resume_bridge.py')),
+            str(Path(env['sd_scripts']).resolve()),
+            '--state-policy', str(Path(run_dir).resolve() / 'state_policy.json'),
             '--config_file', str(Path(run_dir).resolve() / 'train.toml')]
 
 
@@ -491,6 +502,7 @@ def write_run(project, env, run_dir):
         (run_dir / 'sample_prompts.txt').write_text(sample_prompts_text(project['settings']), encoding='utf-8')
     atomic_json(run_dir / 'project_snapshot.json', project)
     atomic_json(run_dir / 'environment_snapshot.json', env)
+    atomic_json(run_dir / 'state_policy.json', {'keep_latest_state_only': project['settings']['training']['keep_latest_state_only']})
     atomic_json(run_dir / 'command.json', command(env, run_dir))
     if project['settings']['training']['resume']:
         info = state_info(project['settings']['training']['resume'])
@@ -498,23 +510,88 @@ def write_run(project, env, run_dir):
     return command(env, run_dir)
 
 
+def caption_audit(folder, extension='.txt', multiline=True):
+    """Read captions using sd-scripts naming rules; never edit dataset files."""
+    if not extension.startswith('.') or re.search(r'[/\\\s]', extension):
+        raise ValueError(tr('キャプション拡張子は .txt の形式で入力してください'))
+    result = {key: [] for key in ('images', 'matched', 'readable', 'missing', 'empty', 'encoding_errors', 'read_errors', 'name_hints')}
+    folder = Path(folder)
+    if not folder.is_dir():
+        return result
+    result['images'] = sorted((p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS), key=lambda p: p.name.casefold())
+    for image in result['images']:
+        base = str(image.with_suffix(''))
+        candidates = [Path(base + extension)]
+        tokens = base.split('_')
+        if len(tokens) >= 5:
+            candidates.append(Path('_'.join(tokens[:-4]) + extension))
+        caption = next((p for p in candidates if p.is_file()), None)
+        if caption is None:
+            result['missing'].append((image, candidates[0]))
+            # These names look plausible but are not read by the backend.
+            for hint in (Path(str(image) + extension), Path(base + extension + extension)):
+                if hint.is_file():
+                    result['name_hints'].append((hint, candidates[0]))
+            continue
+        result['matched'].append((image, caption))
+        try:
+            text = caption.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            result['encoding_errors'].append(caption)
+            continue
+        except OSError as exc:
+            result['read_errors'].append((caption, str(exc)))
+            continue
+        used_text = text if multiline else next(iter(text.splitlines()), '')
+        if not used_text.strip().strip('\ufeff').strip():
+            result['empty'].append(caption)
+        else:
+            result['readable'].append((image, caption))
+    return result
+
+
 def dataset_report(project):
     lines, total = [], 0
     ext = project['settings']['dataset']['caption_extension']
     for sub in project['subsets']:
         folder = Path(sub['image_dir'])
-        images = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS] if folder.is_dir() else []
-        missing = sum(not p.with_suffix(ext).is_file() for p in images)
+        if not sub['image_dir'].strip():
+            lines.append(tr('画像フォルダが未指定です。画像そのものを含むフォルダを選択してください。'))
+            continue
+        if not folder.is_dir():
+            lines.append(tr('画像フォルダが存在しません（絶対パス）: {p0}', p0=folder))
+            continue
+        audit = caption_audit(folder, ext, project['settings']['dataset']['enable_multiline_caption'])
+        images, missing = audit['images'], len(audit['missing'])
         count = len(images) * sub['num_repeats']
         total += count
-        lines.append(f'{folder}: {len(images)} 枚 / caption なし {missing} 枚 / repeat 後 {count} 枚')
+        lines.append(tr('{p0}: {p1} 枚 / caption なし {p2} 枚 / repeat 後 {p3} 枚', p0=folder, p1=len(images), p2=missing, p3=count))
+        lines.append(tr('Caption 認識 {p0} / {p1} 件（同名ファイル {p2} 件 / 空の本文 {p3} 件 / UTF-8 エラー {p4} 件 / 読取エラー {p5} 件）',
+                        p0=len(audit['readable']), p1=len(images), p2=len(audit['matched']), p3=len(audit['empty']), p4=len(audit['encoding_errors']), p5=len(audit['read_errors'])))
+        lines.append(tr('検索設定: 拡張子 {p0} / 例: image.png → image{p0}（同じフォルダ）', p0=ext))
+        for image, caption in audit['readable'][:3]:
+            lines.append(tr('  認識: {p0} → {p1}', p0=image.name, p1=caption.name))
+        for image, expected in audit['missing'][:10]:
+            lines.append(tr('  Caption なし: {p0} / 探した名前: {p1}', p0=image.name, p1=expected.name))
+        for actual, expected in audit['name_hints'][:10]:
+            lines.append(tr('  名前を確認: {p0} は未対応です。期待する名前: {p1}', p0=actual.name, p1=expected.name))
+        for caption in audit['empty'][:10]:
+            lines.append(tr('  本文なし: {p0}（複数行OFFの場合は先頭行を使用）', p0=caption.name))
+        for caption in audit['encoding_errors'][:10]:
+            lines.append(tr('  UTF-8で保存し直してください: {p0}', p0=caption.name))
+        for caption, error in audit['read_errors'][:10]:
+            lines.append(tr('  読み取れません: {p0}: {p1}', p0=caption.name, p1=error))
+        if not images:
+            child_dirs = [p.name for p in folder.iterdir() if p.is_dir()][:10]
+            if child_dirs:
+                lines.append(tr('直下に画像がありません。子フォルダをサブセットとして追加してください: {p0}', p0=', '.join(child_dirs)))
     batch = project['settings']['dataset']['batch_size']
     accum = project['settings']['training']['gradient_accumulation_steps']
     if batch > 0 and accum > 0:
-        lines.append(f'合計 {total} 枚相当 / 実効バッチ {batch * accum} / 約 {math.ceil(math.ceil(total / batch) / accum)} steps/epoch（単一 GPU）')
+        lines.append(tr('合計 {p0} 枚相当 / 実効バッチ {p1} / 約 {p2} steps/epoch（単一 GPU）', p0=total, p1=batch * accum, p2=math.ceil(math.ceil(total / batch) / accum)))
     else:
-        lines.append(f'合計 {total} 枚相当 / steps の概算には正のバッチサイズ・勾配累積が必要です')
-    lines.append('caption がない画像には class tokens が使われます。画像フォルダは再帰走査しません。')
+        lines.append(tr('合計 {p0} 枚相当 / steps の概算には正のバッチサイズ・勾配累積が必要です', p0=total))
+    lines.append(tr('caption がない画像には class tokens が使われます。画像フォルダは再帰走査しません。'))
     return '\n'.join(lines)
 
 
@@ -538,7 +615,7 @@ def probe(env):
     result = subprocess.run([env['python'], '-c', PROBE_CODE], cwd=env['sd_scripts'], capture_output=True,
                             text=True, encoding='utf-8', errors='replace', timeout=90, creationflags=flags)
     if result.returncode:
-        raise ValueError(result.stderr[-4000:] or '環境チェックに失敗しました')
+        raise ValueError(result.stderr[-4000:] or tr('環境チェックに失敗しました'))
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
@@ -548,13 +625,13 @@ def probe_errors(info, settings):
         required.append('bitsandbytes')
     if settings['memory']['attn_mode'] != 'torch':
         required.append({'xformers': 'xformers', 'flash': 'flash_attn'}[settings['memory']['attn_mode']])
-    errors = [f'{m} が学習用 Python にインストールされていません' for m in required if not info.get(m)]
+    errors = [tr('{p0} が学習用 Python にインストールされていません', p0=m) for m in required if not info.get(m)]
     if not info.get('cuda'):
-        errors.append('CUDA GPU を使用できません')
+        errors.append(tr('CUDA GPU を使用できません'))
     elif not info.get('bf16'):
-        errors.append('選択した GPU / PyTorch は bf16 に対応していません')
+        errors.append(tr('選択した GPU / PyTorch は bf16 に対応していません'))
     if settings['memory']['convrot_int8_bwd'] == 'int8' and not info.get('triton'):
-        errors.append('INT8 backward には Triton が必要です')
+        errors.append(tr('INT8 backward には Triton が必要です'))
     return errors
 
 
@@ -624,7 +701,7 @@ class Runner:
 
     def start(self, argv, cwd, run_dir):
         if self.running:
-            raise ValueError('学習はすでに実行中です')
+            raise ValueError(tr('学習はすでに実行中です'))
         self.stopping = False
         self.thread = threading.Thread(target=self._run, args=(argv, cwd, Path(run_dir)), daemon=True)
         self.thread.start()
@@ -658,7 +735,7 @@ class Runner:
             status.update(status='stopped' if self.stopping else ('completed' if code == 0 else 'failed'), returncode=code)
         except Exception as exc:
             status.update(status='failed', error=str(exc))
-            self.emit('log', f'\n起動エラー: {exc}\n')
+            self.emit('log', tr('\n起動エラー: {p0}\n', p0=exc))
         finally:
             if self.job:
                 self.job.close()

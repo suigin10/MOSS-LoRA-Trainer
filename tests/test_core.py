@@ -41,6 +41,18 @@ class CoreTests(unittest.TestCase):
         other = self.store.create('fresh')
         self.assertEqual(other['settings'], defaults())
 
+    def test_new_keeps_selected_model_settings_but_resets_training_and_data(self):
+        models = self.p['settings']['model']
+        models.update(pretrained_model_name_or_path='D:/models/dit.safetensors', text_encoder='D:/models/qwen.safetensors',
+                      vae='D:/models/vae.safetensors', tokenizer_cache_dir='D:/cache', moss_max_token_length=2048)
+        self.p['settings']['training'].update(learning_rate=0.02, resume='old-state')
+        other = self.store.create('models retained', model_settings=models)
+        self.assertEqual(other['settings']['model'], models)
+        self.assertEqual(other['settings']['training'], defaults()['training'])
+        self.assertEqual(other['subsets'], [{'image_dir': '', 'num_repeats': 1, 'class_tokens': ''}])
+        other['settings']['model']['vae'] = 'changed'
+        self.assertEqual(models['vae'], 'D:/models/vae.safetensors')
+
     def test_import_preserves_exported_settings_and_resets_run_references(self):
         self.p['settings']['training'].update(output_name='exported_lora', max_train_steps=1200, resume='old-state', network_weights='old.safetensors')
         run = self.root / 'export'
@@ -238,14 +250,25 @@ class CoreTests(unittest.TestCase):
         argv = write_run(self.p, env, folder)
         self.assertEqual(argv, command(env, folder))
         self.assertIn(str(folder / 'train.toml'), argv)
+        self.assertIn('--state-policy', argv)
+        self.assertTrue(json.loads((folder / 'state_policy.json').read_text())['keep_latest_state_only'])
         config = tomllib.loads((folder / 'train.toml').read_text(encoding='utf-8'))
         self.assertEqual(config['output_dir'], str(folder / 'models'))
+        self.assertNotIn('keep_latest_state_only', config)
         self.assertTrue(Path(config['dataset_config']).is_absolute())
         self.p['settings']['training']['learning_rate'] = 0.1
         snap = json.loads((folder / 'project_snapshot.json').read_text(encoding='utf-8'))
         self.assertEqual(snap['settings']['training']['learning_rate'], 0.0001)
         with self.assertRaises(FileExistsError):
             write_run(self.p, env, folder)
+
+    def test_lora_save_intervals_are_independent_of_state_retention(self):
+        self.p['settings']['training'].update(save_every_n_steps=37, save_every_n_epochs=2, keep_latest_state_only=True)
+        config = training_config(self.p, self.root / 'lora-saves')
+        self.assertEqual(config['save_every_n_steps'], 37)
+        self.assertEqual(config['save_every_n_epochs'], 2)
+        self.assertNotIn('save_last_n_steps', config)
+        self.assertNotIn('save_last_n_epochs', config)
 
     def test_all_presets_are_consistent(self):
         for name, blocks in [('12GB', 20), ('16GB', 0), ('24GB+', 0)]:
@@ -300,6 +323,15 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(any('保存済み 100' in x for x in errors))
         self.p['settings']['training']['network_weights'] = 'warm-start.safetensors'
         self.assertTrue(any('同時に指定' in x for x in validate(self.p)))
+
+    def test_resume_rejects_changed_scheduler_horizon_and_optimizer(self):
+        info = state_info(self.create_state())
+        for key, value in [('max_train_steps', 2000), ('max_train_epochs', 20),
+                           ('optimizer_type', 'AdamW'), ('lr_scheduler', 'cosine'), ('learning_rate', 0.002)]:
+            original = self.p['settings']['training'][key]
+            self.p['settings']['training'][key] = value
+            self.assertTrue(resume_differences(self.p, info), key)
+            self.p['settings']['training'][key] = original
 
     def test_resume_provenance_and_automatic_progress(self):
         state = self.create_state()

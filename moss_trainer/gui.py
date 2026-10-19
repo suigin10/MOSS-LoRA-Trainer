@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .i18n import tr, set_language
+
 import copy
 from datetime import datetime, timedelta
 import json
@@ -42,28 +44,33 @@ class ProjectDialog(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
         self.app = app
-        self.title('新しいプロジェクト')
-        self.geometry('560x330')
-        self.resizable(False, False)
+        self.title(tr('新しいプロジェクト'))
+        self.geometry('640x450')
+        self.minsize(560, 330)
         self.transient(app)
         self.grab_set()
-        body = ttk.Frame(self, padding=24)
-        body.pack(fill='both', expand=True)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        page = ScrollPage(self)
+        page.grid(row=0, column=0, sticky='nsew')
+        body = page.body
         body.columnconfigure(1, weight=1)
-        ttk.Label(body, text='プロジェクトを作成', style='Title.TLabel').grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 16))
-        ttk.Label(body, text='名前').grid(row=1, column=0, sticky='w')
+        ttk.Label(body, text=tr('プロジェクトを作成'), style='Title.TLabel').grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 16))
+        ttk.Label(body, text=tr('名前')).grid(row=1, column=0, sticky='w')
         self.name = tk.StringVar()
         entry = ttk.Entry(body, textvariable=self.name)
         entry.grid(row=1, column=1, sticky='ew', pady=6)
         self.mode = tk.StringVar(value='defaults')
-        ttk.Radiobutton(body, text='推奨デフォルト値から作成（VRAM 12GB 向け）', variable=self.mode, value='defaults', command=self.toggle).grid(row=2, column=0, columnspan=2, sticky='w', pady=(15, 6))
-        ttk.Radiobutton(body, text='既存プロジェクトの設定をコピー', variable=self.mode, value='copy', command=self.toggle).grid(row=3, column=0, columnspan=2, sticky='w', pady=6)
+        ttk.Radiobutton(body, text=tr('推奨デフォルト値から作成（VRAM 12GB 向け）'), variable=self.mode, value='defaults', command=self.toggle).grid(row=2, column=0, columnspan=2, sticky='w', pady=(15, 6))
+        ttk.Radiobutton(body, text=tr('既存プロジェクトの設定をコピー'), variable=self.mode, value='copy', command=self.toggle).grid(row=3, column=0, columnspan=2, sticky='w', pady=6)
         self.source = ttk.Combobox(body, state='disabled', values=[p['name'] for p in app.projects])
         self.source.grid(row=4, column=0, columnspan=2, sticky='ew', pady=6)
         if app.projects:
             self.source.current(next((i for i, p in enumerate(app.projects) if p['id'] == app.project['id']), 0))
-        ttk.Label(body, text='コピー対象: モデル・データパスと設定。実行結果・履歴・再開指定は新規です。', style='Hint.TLabel', wraplength=490).grid(row=5, column=0, columnspan=2, sticky='w', pady=8)
-        ttk.Button(body, text='作成', style='Accent.TButton', command=self.create).grid(row=6, column=1, sticky='e', pady=8)
+        ttk.Label(body, text=tr('デフォルト新規でも現在のモデル設定を引き継ぎます。学習設定は初期値、画像サブセットは空欄です。コピーではデータ・学習設定も引き継ぎます。'), style='Hint.TLabel', wraplength=490).grid(row=5, column=0, columnspan=2, sticky='w', pady=8)
+        controls = ttk.Frame(self, padding=(24, 12))
+        controls.grid(row=1, column=0, sticky='ew')
+        ttk.Button(controls, text=tr('作成'), style='Accent.TButton', command=self.create).pack(side='right')
         entry.focus_set()
         self.bind('<Return>', lambda e: self.create())
 
@@ -76,110 +83,131 @@ class ProjectDialog(tk.Toplevel):
             if self.mode.get() == 'copy':
                 index = self.source.current()
                 if index < 0:
-                    raise ValueError('コピー元を選択してください')
+                    raise ValueError(tr('コピー元を選択してください'))
                 source = self.app.projects[index]
-            project = self.app.store.create(self.name.get(), source)
+            model_settings = self.app.collect()['settings']['model'] if source is None else None
+            project = self.app.store.create(self.name.get(), source, model_settings=model_settings)
             self.app.refresh_projects(project['id'])
             self.destroy()
         except (OSError, ValueError) as exc:
-            messagebox.showerror('作成できません', str(exc), parent=self)
+            messagebox.showerror(tr('作成できません'), str(exc), parent=self)
 
 
 class ImportDialog(tk.Toplevel):
     def __init__(self, app, source, path):
         super().__init__(app)
         self.app, self.source = app, copy.deepcopy(source)
-        self.title('設定の読み込み — 新しいプロジェクトに取り込み')
-        self.geometry('840x570')
+        self.title(tr('設定の読み込み — 新しいプロジェクトに取り込み'))
+        self.geometry('880x650')
         self.transient(app)
         self.grab_set()
-        body = ttk.Frame(self, padding=24)
-        body.pack(fill='both', expand=True)
-        ttk.Label(body, text='設定を新しいプロジェクトに取り込み', style='Title.TLabel').pack(anchor='w')
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        page = ScrollPage(self)
+        page.grid(row=0, column=0, sticky='nsew')
+        body = page.body
+        ttk.Label(body, text=tr('設定を新しいプロジェクトに取り込み'), style='Title.TLabel').pack(anchor='w')
         ttk.Label(body, text=str(path), style='Hint.TLabel', wraplength=780).pack(anchor='w', pady=10)
-        name = source['name'][:85] + '（読み込み）'
+        name = source['name'][:85] + tr('（読み込み）')
         names = {p['name'].casefold() for p in app.projects}
         suffix = 2
         while name.casefold() in names:
-            name = source['name'][:85] + f'（読み込み {suffix}）'
+            name = source['name'][:85] + tr('（読み込み {p0}）', p0=suffix)
             suffix += 1
         self.name = tk.StringVar(value=name)
         row = ttk.Frame(body)
         row.pack(fill='x', pady=(0, 12))
-        ttk.Label(row, text='新しいプロジェクト名').pack(side='left', padx=(0, 16))
+        ttk.Label(row, text=tr('新しいプロジェクト名')).pack(side='left', padx=(0, 16))
         ttk.Entry(row, textvariable=self.name).pack(side='left', fill='x', expand=True)
         m = self.source['settings']['memory']
         if m['attn_mode'] == 'xformers':
             m['split_attn'] = True
         t = source['settings']['training']
-        limit = f'{t["max_train_steps"]} STEP' if t['max_train_steps'] else f'{t["max_train_epochs"]} エポック'
-        lines = [f'学習上限: {limit}', f'学習率: {t["learning_rate"]} / Rank: {t["network_dim"]} / Alpha: {t["network_alpha"]}',
-                 f'出力 LoRA 名: {t["output_name"]}', f'画像サブセット: {len(source["subsets"])} 件', '', 'モデル・画像パス:']
+        limit = f'{t["max_train_steps"]} STEP' if t['max_train_steps'] else tr('{p0} エポック', p0=t['max_train_epochs'])
+        lines = [tr('学習上限: {p0}', p0=limit), tr('学習率: {p0} / Rank: {p1} / Alpha: {p2}', p0=t['learning_rate'], p1=t['network_dim'], p2=t['network_alpha']),
+                 tr('出力 LoRA 名: {p0}', p0=t['output_name']), tr('画像サブセット: {p0} 件', p0=len(source['subsets'])), '', tr('モデル・画像パス:')]
         for key in ('pretrained_model_name_or_path', 'text_encoder', 'vae'):
             value = source['settings']['model'][key]
-            lines.append(f'  {FIELDS["model"][key][0]}: {value or "（未指定）"}')
+            lines.append('  {}: {}'.format(tr(FIELDS['model'][key][0]), value or tr('（未指定）')))
             if value and not Path(value).is_file():
-                lines.append('    → このPCにはありません。読み込み後に選び直してください。')
+                lines.append(tr('    → このPCにはありません。読み込み後に選び直してください。'))
         for sub in source['subsets']:
-            lines.append('  画像: ' + (sub['image_dir'] or '（未指定）'))
+            lines.append(tr('  画像: ') + (sub['image_dir'] or tr('（未指定）')))
             if sub['image_dir'] and not Path(sub['image_dir']).is_dir():
-                lines.append('    → このPCにはありません。読み込み後に選び直してください。')
+                lines.append(tr('    → このPCにはありません。読み込み後に選び直してください。'))
         # Resume references describe a previous run, not a portable training preset.
         preview = copy.deepcopy(self.source)
         preview['settings']['training'].update(resume='', network_weights='')
         issues = validate(preview)
         if issues:
-            lines.extend(['', '読み込み後に確認する項目:'] + ['  ' + issue for issue in issues])
+            lines.extend(['', tr('読み込み後に確認する項目:')] + ['  ' + issue for issue in issues])
         text = tk.Text(body, height=12, bg='#ffffff', fg='#173746', font=('Consolas', 10), wrap='word', relief='flat', padx=10, pady=10)
         text.pack(fill='both', expand=True)
         text.insert('1.0', '\n'.join(lines))
         text.configure(state='disabled')
-        ttk.Label(body, text='学習・生成設定とパスを取り込みます。再開 state・初期 LoRA 重みは解除し、実行履歴は取り込みません。\nこのPCの Python / sd-scripts 設定はそのまま使用します。適用しても学習は開始しません。', style='Hint.TLabel', wraplength=780).pack(anchor='w', pady=12)
-        ttk.Button(body, text='新しいプロジェクトとして読み込む', style='Accent.TButton', command=self.apply).pack(anchor='e')
+        ttk.Label(body, text=tr('学習・生成設定とパスを取り込みます。再開 state・初期 LoRA 重みは解除し、実行履歴は取り込みません。\nこのPCの Python / sd-scripts 設定はそのまま使用します。適用しても学習は開始しません。'), style='Hint.TLabel', wraplength=780).pack(anchor='w', pady=12)
+        controls = ttk.Frame(self, padding=(24, 12))
+        controls.grid(row=1, column=0, sticky='ew')
+        ttk.Button(controls, text=tr('新しいプロジェクトとして読み込む'), style='Accent.TButton', command=self.apply).pack(side='right')
 
     def apply(self):
         try:
             project = self.app.store.create(self.name.get(), self.source, preserve_output_name=True)
             self.app.refresh_projects(project['id'])
-            self.app.status.set('設定を新しいプロジェクトに読み込みました。パスを確認してください。')
+            self.app.status.set(tr('設定を新しいプロジェクトに読み込みました。パスを確認してください。'))
             self.destroy()
         except (OSError, ValueError) as exc:
-            messagebox.showerror('設定の読み込み', str(exc), parent=self)
+            messagebox.showerror(tr('設定の読み込み'), str(exc), parent=self)
 
 
 class ResumeDialog(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
         self.app = app
-        self.title('保存した state から再開')
-        self.geometry('980x570')
+        self.title(tr('保存した state から再開'))
+        self.geometry(f'{min(980, self.winfo_screenwidth() - 60)}x{min(650, self.winfo_screenheight() - 100)}')
+        self.minsize(640, 420)
         self.transient(app)
         self.grab_set()
-        body = ttk.Frame(self, padding=20)
-        body.pack(fill='both', expand=True)
-        ttk.Label(body, text='再開ポイントを選択', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(body, text='最新の保存日時順。停止・失敗した実行の state も表示します。上限は「再開後の総 STEP 数」です。', style='Hint.TLabel').pack(anchor='w', pady=8)
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+        page = ScrollPage(self)
+        page.grid(row=0, column=0, sticky='nsew')
+        def scroll_dialog(event):
+            if not isinstance(event.widget, ttk.Treeview):
+                page.canvas.yview_scroll(int(-event.delta / 120), 'units')
+            return 'break'
+        self.bind('<MouseWheel>', scroll_dialog)
+        body = page.body
+        ttk.Label(body, text=tr('再開ポイントを選択'), style='Title.TLabel').pack(anchor='w')
+        ttk.Label(body, text=tr('最新の保存日時順。停止・失敗した実行の state も表示します。元の学習計画を引き継ぎます。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=8)
         self.items = discover_states(app.store.directory(app.project))
-        self.tree = ttk.Treeview(body, columns=('run', 'step', 'epoch', 'status'), show='headings', height=10, selectmode='browse')
-        for key, title, width in [('run', '実行 / state', 520), ('step', '保存 STEP', 100), ('epoch', 'Epoch', 65), ('status', '構造チェック', 110)]:
+        self.tree = ttk.Treeview(body, columns=('run', 'step', 'epoch', 'status'), show='headings', height=6, selectmode='browse')
+        for key, title, width in [('run', tr('実行 / state'), 520), ('step', tr('保存 STEP'), 100), ('epoch', 'Epoch', 65), ('status', tr('構造チェック'), 110)]:
             self.tree.heading(key, text=title)
             self.tree.column(key, width=width)
         self.tree.pack(fill='both', expand=True)
         self.tree.bind('<<TreeviewSelect>>', self.selected)
-        self.detail = tk.StringVar(value='state がない場合は「外部 state を選択」でフォルダを選べます。')
+        self.detail = tk.StringVar(value=tr('state がない場合は「外部 state を選択」でフォルダを選べます。'))
         ttk.Label(body, textvariable=self.detail, style='Hint.TLabel', wraplength=910).pack(anchor='w', pady=10)
         options = ttk.Frame(body)
         options.pack(fill='x')
         self.restore = tk.BooleanVar(value=True)
-        ttk.Checkbutton(options, text='元のモデル・データ・学習設定を復元', variable=self.restore).pack(side='left')
-        ttk.Label(options, text='総 STEP 上限').pack(side='left', padx=(20, 8))
+        ttk.Checkbutton(options, text=tr('元のモデル・データ・学習設定を復元'), variable=self.restore).pack(anchor='w')
+        limit_row = ttk.Frame(options)
+        limit_row.pack(fill='x', pady=6)
+        self.target_label = ttk.Label(limit_row, text=tr('総 STEP 上限'))
+        self.target_label.pack(side='left', padx=(0, 8))
         self.target = tk.StringVar(value='1500')
-        ttk.Entry(options, textvariable=self.target, width=10).pack(side='left')
-        ttk.Label(body, text='state は optimizer / scheduler / 乱数状態を含みます。LoRA 単体から始める場合は「初期 LoRA 重み」を使用してください。', style='Hint.TLabel', wraplength=910).pack(anchor='w', pady=10)
-        controls = ttk.Frame(body)
-        controls.pack(fill='x')
-        ttk.Button(controls, text='外部 state を選択…', command=self.external).pack(side='left')
-        ttk.Button(controls, text='この state を再開設定に適用', style='Accent.TButton', command=self.apply).pack(side='right')
+        ttk.Entry(limit_row, textvariable=self.target, width=10, state='readonly').pack(side='left')
+        ttk.Label(body, text=tr('学習上限は元の STEP / Epoch 指定を維持します。上限・optimizer・LR を変更する追加学習は、LoRA 重みから新規に開始してください。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=10)
+        ttk.Label(body, text=tr('state は optimizer / scheduler / 乱数状態を含みます。LoRA 単体から始める場合は「初期 LoRA 重み」を使用してください。'), style='Hint.TLabel', wraplength=910).pack(anchor='w', pady=10)
+        controls = ttk.Frame(self, padding=(20, 12))
+        controls.grid(row=1, column=0, sticky='ew')
+        self.controls = controls
+        ttk.Button(controls, text=tr('外部 state を選択…'), command=self.external).pack(side='left')
+        self.apply_button = ttk.Button(controls, text=tr('この state を再開設定に適用'), style='Accent.TButton', command=self.apply)
+        self.apply_button.pack(side='right')
         for i in range(len(self.items)):
             self.insert(i)
         if self.items:
@@ -189,7 +217,7 @@ class ResumeDialog(tk.Toplevel):
     def insert(self, index):
         info = self.items[index]
         path = Path(info['path'])
-        self.tree.insert('', 'end', iid=str(index), values=(path.parent.parent.name + ' / ' + path.name, info['step'], info['epoch'], '不足あり' if info['errors'] else 'OK'))
+        self.tree.insert('', 'end', iid=str(index), values=(path.parent.parent.name + ' / ' + path.name, info['step'], info['epoch'], tr('不足あり') if info['errors'] else 'OK'))
 
     def selected(self, _=None):
         selection = self.tree.selection()
@@ -197,13 +225,15 @@ class ResumeDialog(tk.Toplevel):
             return
         info = self.items[int(selection[0])]
         source = info.get('snapshot')
-        total = source['settings'].get('training', {}).get('max_train_steps', 1500) if source else 1500
-        self.target.set(max(total, info['step'] + 500))
+        training = source['settings']['training'] if source else self.app.collect()['settings']['training']
+        total = training.get('max_train_steps', 1500)
+        self.target.set(total or training.get('max_train_epochs', 10))
+        self.target_label.configure(text=tr('総 STEP 上限') if total else tr('総 Epoch 上限'))
         self.restore.set(bool(source))
-        self.detail.set(info['path'] + '\n' + (' / '.join(info['errors']) if info['errors'] else ('元設定あり: 復元して再開できます。' if source else '元設定なし: 自動の設定比較はできません。元のモデル・Rank・optimizer 等と揃えてください。')))
+        self.detail.set(info['path'] + '\n' + (' / '.join(info['errors']) if info['errors'] else (tr('元設定あり: 復元して再開できます。') if source else tr('元設定なし: 自動の設定比較はできません。元のモデル・Rank・optimizer 等と揃えてください。'))))
 
     def external(self):
-        folder = filedialog.askdirectory(parent=self, title='train_state.json を含む state フォルダ')
+        folder = filedialog.askdirectory(parent=self, title=tr('train_state.json を含む state フォルダ'))
         if folder:
             self.items.append(state_info(folder))
             index = len(self.items) - 1
@@ -216,13 +246,10 @@ class ResumeDialog(tk.Toplevel):
         try:
             selection = self.tree.selection()
             if not selection:
-                raise ValueError('再開する state を選択してください')
+                raise ValueError(tr('再開する state を選択してください'))
             info = self.items[int(selection[0])]
             if info['errors']:
                 raise ValueError('\n'.join(info['errors']))
-            target = int(self.target.get())
-            if target <= info['step']:
-                raise ValueError(f'総 STEP 上限は {info["step"]} より大きくしてください')
             p = self.app.collect()
             if self.restore.get() and info['snapshot']:
                 source = info['snapshot']
@@ -230,17 +257,21 @@ class ResumeDialog(tk.Toplevel):
                 for group in s:
                     s[group].update(source['settings'].get(group, {}))
                 p.update(settings=s, subsets=copy.deepcopy(source['subsets']))
-            p['settings']['training'].update(resume=info['path'], network_weights='', max_train_steps=target)
+            training = p['settings']['training']
+            target = training['max_train_steps'] or training['max_train_epochs']
+            if training['max_train_steps'] and target <= info['step']:
+                raise ValueError(tr('元の学習上限に到達した state です。追加学習は LoRA 重みから新規に開始してください'))
+            training.update(resume=info['path'], network_weights='')
             errors = resume_differences(p, info)
             if errors:
                 raise ValueError('\n'.join(errors))
             saved = copy.deepcopy(self.app.saved_snapshot)
             self.app.load_project(p)
             self.app.saved_snapshot = saved
-            self.app.status.set(f'{info["step"]} → {target} steps の再開を設定（未保存）')
+            self.app.status.set(tr('保存 STEP {p0} から元の学習計画で再開を設定（未保存）', p0=info['step']))
             self.destroy()
         except (ValueError, OSError, KeyError) as exc:
-            messagebox.showerror('再開設定', str(exc), parent=self)
+            messagebox.showerror(tr('再開設定'), str(exc), parent=self)
 
 
 class App(tk.Tk):
@@ -264,6 +295,11 @@ class App(tk.Tk):
             preferences = json.loads((self.data_dir / 'ui_preferences.json').read_text(encoding='utf-8'))
         except (OSError, ValueError):
             preferences = {}
+        self.preferences = preferences if isinstance(preferences, dict) else {}
+        self.language = self.preferences.get('language', 'ja')
+        if self.language not in ('ja', 'en'):
+            self.language = 'ja'
+        set_language(self.language)
         sound = preferences.get('completion_sound', True) if isinstance(preferences, dict) else True
         self.sound_enabled = tk.BooleanVar(value=sound if type(sound) is bool else True)
         self.last_folder = None
@@ -276,12 +312,16 @@ class App(tk.Tk):
         self.style_ui()
         self.build()
         if not self.store.list():
-            self.store.create('はじめてのプロジェクト')
+            self.store.create(tr('はじめてのプロジェクト'))
         self.refresh_projects()
         self.poll_id = self.after(150, self.poll)
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.bind_all('<Control-s>', lambda e: self.save())
         self.bind_all('<MouseWheel>', self.wheel)
+        # TCombobox's class binding changes the selection before bind_all runs.
+        # Replace only its wheel binding; the posted list and keyboard bindings
+        # retain their normal behavior.
+        self.bind_class('TCombobox', '<MouseWheel>', self.combobox_wheel)
 
     def style_ui(self):
         style = ttk.Style(self)
@@ -339,20 +379,25 @@ class App(tk.Tk):
         header.pack(fill='x')
         ttk.Label(header, text='MOSS Studio', style='HeaderTitle.TLabel').pack(side='left')
         ttk.Label(header, text='  /  MOSS-Image LoRA Trainer', style='HeaderSubtitle.TLabel').pack(side='left', padx=12)
-        ttk.Button(header, text='実行環境', style='Header.TButton', command=self.environment).pack(side='right')
-        ttk.Button(header, text='かんたん導入', style='Header.TButton', command=self.setup_dialog).pack(side='right', padx=8)
+        ttk.Button(header, text=tr('実行環境'), style='Header.TButton', command=self.environment).pack(side='right')
+        ttk.Button(header, text=tr('かんたん導入'), style='Header.TButton', command=self.setup_dialog).pack(side='right', padx=8)
+        self.language_choice = tk.StringVar(value='日本語' if self.language == 'ja' else 'English')
+        self.language_combo = ttk.Combobox(header, textvariable=self.language_choice, values=['日本語', 'English'], state='readonly', width=9)
+        self.language_combo.pack(side='right', padx=8)
+        self.language_combo.bind('<<ComboboxSelected>>', self.change_language)
+        ttk.Label(header, text='Language', style='HeaderSubtitle.TLabel').pack(side='right')
         projectbar = ttk.Frame(self, padding=(24, 0, 24, 12))
         projectbar.pack(fill='x')
-        ttk.Label(projectbar, text='プロジェクト').pack(side='left', padx=(0, 10))
+        ttk.Label(projectbar, text=tr('プロジェクト')).pack(side='left', padx=(0, 10))
         self.project_combo = ttk.Combobox(projectbar, state='readonly', width=32)
         self.project_combo.pack(side='left')
         self.project_combo.bind('<<ComboboxSelected>>', self.switch_project)
-        self.new_button = ttk.Button(projectbar, text='＋ 新規 / コピー', command=self.new_project)
+        self.new_button = ttk.Button(projectbar, text=tr('＋ 新規 / コピー'), command=self.new_project)
         self.new_button.pack(side='left', padx=8)
-        self.import_button = ttk.Button(projectbar, text='設定を読み込む', command=self.import_settings)
+        self.import_button = ttk.Button(projectbar, text=tr('設定を読み込む'), command=self.import_settings)
         self.import_button.pack(side='left', padx=(0, 8))
-        ttk.Button(projectbar, text='設定を保存', command=self.save).pack(side='left')
-        ttk.Button(projectbar, text='保存先を開く', command=self.open_project).pack(side='right')
+        ttk.Button(projectbar, text=tr('設定を保存'), command=self.save).pack(side='left')
+        ttk.Button(projectbar, text=tr('保存先を開く'), command=self.open_project).pack(side='right')
         info = ttk.Frame(self, padding=(24, 0, 24, 10))
         info.pack(fill='x')
         quick = ttk.Frame(info)
@@ -360,15 +405,15 @@ class App(tk.Tk):
         self.memory_summary = tk.StringVar()
         ttk.Label(quick, textvariable=self.memory_summary, style='Subtitle.TLabel').pack(side='left')
         selector = ttk.Combobox(quick, state='readonly', values=['12GB', '16GB', '24GB+'], width=12)
-        selector.set('VRAM 容量')
+        selector.set(tr('VRAM 容量'))
         selector.pack(side='right')
         selector.bind('<<ComboboxSelected>>', lambda e: self.set_preset(selector.get()))
-        ttk.Label(info, text='CUDA / bf16 対応の NVIDIA GPU が対象です。VRAM 容量に応じた開始値を選べます。CPU スワップには十分な RAM が必要です。', style='Hint.TLabel').pack(anchor='w')
-        ttk.Label(info, text='白い欄は直接入力、淡いティールの欄はクリックして選択できます。グレーの欄は現在無効です。', style='Hint.TLabel').pack(anchor='w', pady=(3, 0))
+        ttk.Label(info, text=tr('CUDA / bf16 対応の NVIDIA GPU が対象です。VRAM 容量に応じた開始値を選べます。CPU スワップには十分な RAM が必要です。'), style='Hint.TLabel').pack(anchor='w')
+        ttk.Label(info, text=tr('白い欄は直接入力、淡いティールの欄はクリックして選択できます。グレーの欄は現在無効です。'), style='Hint.TLabel').pack(anchor='w', pady=(3, 0))
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill='both', expand=True, padx=24)
         self.pages = {}
-        tabs = [('model', '01 モデル'), ('dataset', '02 データセット'), ('training', '03 学習'), ('memory', '04 VRAM・速度'), ('flow', '05 Flow・LoRA 詳細'), ('samples', '06 サンプル')]
+        tabs = [('model', tr('01 モデル')), ('dataset', tr('02 データセット')), ('training', tr('03 学習')), ('memory', tr('04 VRAM・速度')), ('flow', tr('05 Flow・LoRA 詳細')), ('samples', tr('06 サンプル'))]
         for group, title in tabs:
             page = ScrollPage(self.notebook)
             self.pages[group] = page
@@ -379,20 +424,20 @@ class App(tk.Tk):
             elif group == 'training':
                 modebar = ttk.Frame(page.body)
                 modebar.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 12))
-                ttk.Label(modebar, text='学習の終了条件').pack(side='left', padx=(0, 14))
+                ttk.Label(modebar, text=tr('学習の終了条件')).pack(side='left', padx=(0, 14))
                 self.stop_mode = tk.StringVar(value='steps')
-                ttk.Radiobutton(modebar, text='STEP 数で指定', variable=self.stop_mode, value='steps', command=self.set_stop_mode).pack(side='left', padx=6)
-                ttk.Radiobutton(modebar, text='エポック数で指定', variable=self.stop_mode, value='epochs', command=self.set_stop_mode).pack(side='left', padx=6)
+                ttk.Radiobutton(modebar, text=tr('STEP 数で指定'), variable=self.stop_mode, value='steps', command=self.set_stop_mode).pack(side='left', padx=6)
+                ttk.Radiobutton(modebar, text=tr('エポック数で指定'), variable=self.stop_mode, value='epochs', command=self.set_stop_mode).pack(side='left', padx=6)
                 resumebar = ttk.Frame(page.body)
                 resumebar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 12))
-                ttk.Button(resumebar, text='保存した state から再開…', command=self.resume_dialog).pack(side='left')
-                ttk.Button(resumebar, text='再開指定を解除', command=self.clear_resume).pack(side='left', padx=8)
-                ttk.Label(resumebar, text='100 steps ごとに state も保存（初期値）', style='Hint.TLabel').pack(side='left', padx=8)
+                ttk.Button(resumebar, text=tr('保存した state から再開…'), command=self.resume_dialog).pack(side='left')
+                ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
+                ttk.Label(resumebar, text=tr('100 steps ごとに state も保存（初期値）'), style='Hint.TLabel').pack(side='left', padx=8)
                 row = 2
             elif group == 'memory':
                 presets = ttk.Frame(page.body)
                 presets.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 12))
-                ttk.Label(presets, text='VRAM 容量別プリセット').pack(side='left', padx=(0, 10))
+                ttk.Label(presets, text=tr('VRAM 容量別プリセット')).pack(side='left', padx=(0, 10))
                 for preset in ('12GB', '16GB', '24GB+'):
                     ttk.Button(presets, text=preset, command=lambda p=preset: self.set_preset(p)).pack(side='left', padx=4)
                 row = 1
@@ -400,7 +445,7 @@ class App(tk.Tk):
                 self.field(page.body, group, key, spec, row)
                 row += 1
             if group == 'memory':
-                ttk.Label(page.body, text='VRAM 12GB: INT8 / swap 20　　16GB: INT8 / swap 0　　24GB以上: bf16 / swap 0\n機種名ではなく搭載 VRAM 容量で選択してください。すべて batch 1・checkpointing・ディスクキャッシュ ON。\n必要なメモリは画像・キャプションでも変わります。8GB 向けプリセットは用意していません。', style='Hint.TLabel', wraplength=800).grid(row=row, column=0, columnspan=3, sticky='w', pady=12)
+                ttk.Label(page.body, text=tr('VRAM 12GB: INT8 / swap 20\u3000\u300016GB: INT8 / swap 0\u3000\u300024GB以上: bf16 / swap 0\n機種名ではなく搭載 VRAM 容量で選択してください。すべて batch 1・checkpointing・ディスクキャッシュ ON。\n必要なメモリは画像・キャプションでも変わります。8GB 向けプリセットは用意していません。'), style='Hint.TLabel', wraplength=800).grid(row=row, column=0, columnspan=3, sticky='w', pady=12)
         for key in ('convrot_int8', 'convrot_int8_text_encoder', 'blocks_to_swap'):
             self.variables[('memory', key)].trace_add('write', lambda *args: self.update_summary())
         self.variables[('dataset', 'batch_size')].trace_add('write', lambda *args: self.update_summary())
@@ -413,17 +458,18 @@ class App(tk.Tk):
         ttk.Label(timingbar, textvariable=self.progress_text, style='Subtitle.TLabel').pack(anchor='w')
         footer = ttk.Frame(self, padding=(24, 12))
         footer.pack(fill='x')
-        self.status = tk.StringVar(value='設定待ち')
+        self.status = tk.StringVar(value=tr('設定待ち'))
         ttk.Label(footer, textvariable=self.status).pack(side='left')
-        self.start_button = ttk.Button(footer, text='▶ 学習を開始', style='Accent.TButton', command=self.start)
+        self.start_button = ttk.Button(footer, text=tr('▶ 学習を開始'), style='Accent.TButton', command=self.start)
         self.start_button.pack(side='right', padx=(8, 0))
-        self.stop_button = ttk.Button(footer, text='■ 停止', command=self.stop, state='disabled')
+        self.stop_button = ttk.Button(footer, text=tr('■ 停止'), command=self.stop, state='disabled')
         self.stop_button.pack(side='right', padx=8)
-        ttk.Button(footer, text='設定を書き出す', command=self.export).pack(side='right', padx=4)
-        ttk.Button(footer, text='設定を確認', command=self.check).pack(side='right', padx=4)
+        ttk.Button(footer, text=tr('設定を書き出す'), command=self.export).pack(side='right', padx=4)
+        ttk.Button(footer, text=tr('設定を確認'), command=self.check).pack(side='right', padx=4)
 
     def field(self, parent, group, key, spec, row):
         label, default, choices, hint = spec
+        label, hint = tr(label), tr(hint)
         box = ttk.Frame(parent)
         box.grid(row=row, column=0, columnspan=3, sticky='ew', pady=6)
         box.columnconfigure(1, weight=1)
@@ -446,7 +492,7 @@ class App(tk.Tk):
             widget.grid(row=0, column=1, sticky='ew')
             self.field_widgets[(group, key)] = widget
             if choices in ('file', 'dir'):
-                ttk.Button(box, text='参照…', command=lambda: self.browse(var, choices)).grid(row=0, column=2, padx=(6, 0))
+                ttk.Button(box, text=tr('参照…'), command=lambda: self.browse(var, choices)).grid(row=0, column=2, padx=(6, 0))
         if hint:
             ttk.Label(box, text=hint, style='Hint.TLabel', wraplength=680).grid(row=1, column=1, columnspan=2, sticky='w', pady=(3, 0))
 
@@ -456,17 +502,17 @@ class App(tk.Tk):
             var.set(str(Path(path).resolve()))
 
     def build_subsets(self, parent):
-        panel = ttk.LabelFrame(parent, text='画像サブセット', padding=12)
+        panel = ttk.LabelFrame(parent, text=tr('画像サブセット'), padding=12)
         panel.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 12))
         panel.columnconfigure(0, weight=1)
-        ttk.Label(panel, text='画像と同名の .txt を配置。サブフォルダは必要な数だけ追加してください。', style='Hint.TLabel').grid(row=0, column=0, sticky='w')
+        ttk.Label(panel, text=tr('画像と同名の .txt を配置。サブフォルダは必要な数だけ追加してください。'), style='Hint.TLabel').grid(row=0, column=0, sticky='w')
         self.subsets_panel = ttk.Frame(panel)
         self.subsets_panel.grid(row=1, column=0, sticky='ew')
         self.subsets_panel.columnconfigure(0, weight=1)
         controls = ttk.Frame(panel)
         controls.grid(row=2, column=0, sticky='ew', pady=(8, 0))
-        ttk.Button(controls, text='＋ サブセット追加', command=lambda: self.add_subset()).pack(side='left')
-        ttk.Button(controls, text='画像・caption 数を確認', command=self.scan_dataset).pack(side='left', padx=8)
+        ttk.Button(controls, text=tr('＋ サブセット追加'), command=lambda: self.add_subset()).pack(side='left')
+        ttk.Button(controls, text=tr('画像数・Caption数を確認'), command=self.scan_dataset).pack(side='left', padx=8)
         return 1
 
     def add_subset(self, sub=None):
@@ -475,9 +521,9 @@ class App(tk.Tk):
         frame.pack(fill='x')
         frame.columnconfigure(1, weight=1)
         path, repeats, tokens = (tk.StringVar(value=str(sub[k])) for k in ('image_dir', 'num_repeats', 'class_tokens'))
-        ttk.Label(frame, text='画像フォルダ', width=14).grid(row=0, column=0, sticky='w')
+        ttk.Label(frame, text=tr('画像フォルダ'), width=14).grid(row=0, column=0, sticky='w')
         ttk.Entry(frame, textvariable=path).grid(row=0, column=1, sticky='ew')
-        ttk.Button(frame, text='参照…', command=lambda: self.browse(path, 'dir')).grid(row=0, column=2, padx=4)
+        ttk.Button(frame, text=tr('参照…'), command=lambda: self.browse(path, 'dir')).grid(row=0, column=2, padx=4)
         ttk.Label(frame, text='Repeat / class tokens').grid(row=1, column=0, sticky='w', pady=6)
         second = ttk.Frame(frame)
         second.grid(row=1, column=1, sticky='ew')
@@ -485,7 +531,7 @@ class App(tk.Tk):
         ttk.Entry(second, textvariable=tokens).pack(side='left', fill='x', expand=True, padx=10)
         record = (frame, path, repeats, tokens)
         self.subset_rows.append(record)
-        ttk.Button(frame, text='削除', command=lambda: self.remove_subset(record)).grid(row=1, column=2)
+        ttk.Button(frame, text=tr('削除'), command=lambda: self.remove_subset(record)).grid(row=1, column=2)
 
     def remove_subset(self, record):
         record[0].destroy()
@@ -494,18 +540,18 @@ class App(tk.Tk):
     def build_monitor(self):
         page = ttk.Frame(self.notebook, padding=12)
         self.monitor = page
-        self.notebook.add(page, text='実行・ログ')
+        self.notebook.add(page, text=tr('実行・ログ'))
         buttons = ttk.Frame(page)
         buttons.pack(fill='x', pady=(0, 10))
-        ttk.Button(buttons, text='現在の設定をプレビュー', command=self.preview).pack(side='left')
-        ttk.Button(buttons, text='最新の実行フォルダ', command=self.open_run).pack(side='left', padx=8)
-        ttk.Button(buttons, text='実行履歴', command=self.history).pack(side='left')
-        ttk.Label(buttons, text='実行ごとに設定・モデル・ログを別フォルダに保存', style='Hint.TLabel').pack(side='right')
+        ttk.Button(buttons, text=tr('現在の設定をプレビュー'), command=self.preview).pack(side='left')
+        ttk.Button(buttons, text=tr('最新の実行フォルダ'), command=self.open_run).pack(side='left', padx=8)
+        ttk.Button(buttons, text=tr('実行履歴'), command=self.history).pack(side='left')
+        ttk.Label(buttons, text=tr('実行ごとに設定・モデル・ログを別フォルダに保存'), style='Hint.TLabel').pack(side='right')
         alerts = ttk.Frame(page)
         alerts.pack(fill='x', pady=(0, 8))
-        ttk.Checkbutton(alerts, text='学習終了時に通知音（完了・失敗）', variable=self.sound_enabled, command=self.save_ui_preferences).pack(side='left')
-        ttk.Button(alerts, text='音を試す', command=lambda: self.play_notification(force=True)).pack(side='left', padx=8)
-        self.progress_text = tk.StringVar(value='学習待機中')
+        ttk.Checkbutton(alerts, text=tr('学習終了時に通知音（完了・失敗）'), variable=self.sound_enabled, command=self.save_ui_preferences).pack(side='left')
+        ttk.Button(alerts, text=tr('音を試す'), command=lambda: self.play_notification(force=True)).pack(side='left', padx=8)
+        self.progress_text = tk.StringVar(value=tr('学習待機中'))
         self.progress = ttk.Progressbar(page, mode='indeterminate')
         self.progress.pack(fill='x', pady=(0, 8))
         self.log = tk.Text(page, bg='#122d3b', fg='#d8eee7', insertbackground='white', font=('Consolas', 10), wrap='word', state='disabled',
@@ -541,8 +587,8 @@ class App(tk.Tk):
         self.training_progress.reset()
         self.progress.stop()
         self.progress.configure(mode='indeterminate', value=0)
-        self.progress_text.set('学習待機中')
-        self.status.set(f'{project["name"]}  /  待機中')
+        self.progress_text.set(tr('学習待機中'))
+        self.status.set(tr('{p0}  /  待機中', p0=project['name']))
 
     def collect(self):
         result = copy.deepcopy(self.project)
@@ -553,7 +599,7 @@ class App(tk.Tk):
                 value = var.get()
                 result['settings'][group][key] = type(default)(value) if type(default) in (int, float) else value
             except (ValueError, tk.TclError):
-                raise ValueError(f'{FIELDS[group][key][0]}: 数値の形式を確認してください')
+                raise ValueError(tr('{p0}: 数値の形式を確認してください', p0=tr(FIELDS[group][key][0])))
         for (group, key), widget in self.texts.items():
             result['settings'][group][key] = widget.get('1.0', 'end-1c')
         result['subsets'] = []
@@ -561,7 +607,7 @@ class App(tk.Tk):
             try:
                 count = int(repeats.get())
             except ValueError:
-                raise ValueError('Repeat は整数で入力してください')
+                raise ValueError(tr('Repeat は整数で入力してください'))
             result['subsets'].append({'image_dir': path.get().strip(), 'num_repeats': count, 'class_tokens': tokens.get()})
         return result
 
@@ -584,10 +630,10 @@ class App(tk.Tk):
             self.project = project
             self.saved_snapshot = copy.deepcopy(project)
             self.projects = self.store.list()
-            self.status.set('設定を保存しました' + ('（実行中の設定は開始時のスナップショットです）' if self.busy else ''))
+            self.status.set(tr('設定を保存しました') + (tr('（実行中の設定は開始時のスナップショットです）') if self.busy else ''))
             return True
         except (ValueError, OSError) as exc:
-            messagebox.showerror('保存できません', str(exc), parent=self)
+            messagebox.showerror(tr('保存できません'), str(exc), parent=self)
             return False
 
     def allow_switch(self):
@@ -596,7 +642,7 @@ class App(tk.Tk):
         except ValueError:
             dirty = True
         if dirty:
-            answer = messagebox.askyesnocancel('未保存の設定', '現在の変更を保存しますか？', parent=self)
+            answer = messagebox.askyesnocancel(tr('未保存の設定'), tr('現在の変更を保存しますか？'), parent=self)
             return False if answer is None else (self.save() if answer else True)
         return True
 
@@ -617,14 +663,14 @@ class App(tk.Tk):
         for key in ('convrot_int8', 'convrot_int8_text_encoder', 'blocks_to_swap', 'cpu_offload_checkpointing', 'unsloth_offload_checkpointing', 'gradient_checkpointing', 'cache_latents', 'cache_latents_to_disk', 'cache_text_encoder_outputs', 'cache_text_encoder_outputs_to_disk'):
             self.variables[('memory', key)].set(s['memory'][key])
         self.variables[('dataset', 'batch_size')].set(1)
-        self.status.set(f'{name} プリセットを適用しました（未保存）')
+        self.status.set(tr('{p0} プリセットを適用しました（未保存）', p0=name))
 
     def update_summary(self):
         dit = 'INT8' if self.variables[('memory', 'convrot_int8')].get() else 'bf16'
         te = 'INT8' if self.variables[('memory', 'convrot_int8_text_encoder')].get() else 'bf16'
         blocks = self.variables[('memory', 'blocks_to_swap')].get()
         batch = self.variables[('dataset', 'batch_size')].get()
-        self.memory_summary.set(f'DiT {dit} / Qwen {te}  ·  CPU swap {blocks}  ·  batch {batch}  ·  DiT のみ学習')
+        self.memory_summary.set(tr('DiT {p0} / Qwen {p1}  ·  CPU swap {p2}  ·  batch {p3}  ·  DiT のみ学習', p0=dit, p1=te, p2=blocks, p3=batch))
 
     def set_stop_mode(self):
         var = self.variables[('training', 'max_train_steps')]
@@ -656,27 +702,30 @@ class App(tk.Tk):
 
     def clear_resume(self):
         self.variables[('training', 'resume')].set('')
-        self.status.set('state の再開指定を解除しました（未保存）')
+        self.status.set(tr('state の再開指定を解除しました（未保存）'))
 
     def environment(self):
         if self.busy:
-            messagebox.showinfo('実行環境', '実行環境は学習終了後に変更できます。', parent=self)
+            messagebox.showinfo(tr('実行環境'), tr('実行環境は学習終了後に変更できます。'), parent=self)
             return
         dialog = tk.Toplevel(self)
-        dialog.title('実行環境 — 全プロジェクト共通')
-        dialog.geometry('770x330')
+        dialog.title(tr('実行環境 — 全プロジェクト共通'))
+        dialog.geometry('800x400')
         dialog.transient(self)
         dialog.grab_set()
-        body = ttk.Frame(dialog, padding=24)
-        body.pack(fill='both', expand=True)
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+        page = ScrollPage(dialog)
+        page.grid(row=0, column=0, sticky='nsew')
+        body = page.body
         body.columnconfigure(1, weight=1)
-        ttk.Label(body, text='学習バックエンドを指定', style='Title.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
+        ttk.Label(body, text=tr('学習バックエンドを指定'), style='Title.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
         variables = {key: tk.StringVar(value=value) for key, value in self.env.items()}
-        for row, (key, label, kind) in enumerate((('python', '学習用 Python', 'file'), ('sd_scripts', 'sd-scripts フォルダ', 'dir')), 1):
+        for row, (key, label, kind) in enumerate((('python', tr('学習用 Python'), 'file'), ('sd_scripts', tr('sd-scripts フォルダ'), 'dir')), 1):
             ttk.Label(body, text=label, width=21).grid(row=row, column=0, sticky='w', pady=8)
             ttk.Entry(body, textvariable=variables[key]).grid(row=row, column=1, sticky='ew', pady=8)
-            ttk.Button(body, text='参照…', command=lambda k=key, c=kind: self.browse(variables[k], c)).grid(row=row, column=2, padx=6)
-        ttk.Label(body, text='Python は venv\\Scripts\\python.exe を選択。sd-scripts は moss_image_train_network.py を含む版が必要です。\nGUI 自体は Python 標準ライブラリだけで動きます。学習環境は README に沿って準備してください。', style='Hint.TLabel', wraplength=700).grid(row=3, column=0, columnspan=3, sticky='w', pady=16)
+            ttk.Button(body, text=tr('参照…'), command=lambda k=key, c=kind: self.browse(variables[k], c)).grid(row=row, column=2, padx=6)
+        ttk.Label(body, text=tr('Python は venv\\Scripts\\python.exe を選択。sd-scripts は moss_image_train_network.py を含む版が必要です。\nGUI 自体は Python 標準ライブラリだけで動きます。学習環境は README に沿って準備してください。'), style='Hint.TLabel', wraplength=700).grid(row=3, column=0, columnspan=3, sticky='w', pady=16)
         def commit(check=False):
             try:
                 env = {k: v.get().strip() for k, v in variables.items()}
@@ -686,22 +735,27 @@ class App(tk.Tk):
                 if check:
                     self.environment_check()
             except OSError as exc:
-                messagebox.showerror('環境設定', str(exc), parent=dialog)
-        ttk.Button(body, text='保存して環境チェック', command=lambda: commit(True)).grid(row=4, column=1, sticky='e')
-        ttk.Button(body, text='保存', style='Accent.TButton', command=commit).grid(row=4, column=2, padx=6)
+                messagebox.showerror(tr('環境設定'), str(exc), parent=dialog)
+        controls = ttk.Frame(dialog, padding=(24, 12))
+        controls.grid(row=1, column=0, sticky='ew')
+        ttk.Button(controls, text=tr('保存'), style='Accent.TButton', command=commit).pack(side='right')
+        ttk.Button(controls, text=tr('保存して環境チェック'), command=lambda: commit(True)).pack(side='right', padx=8)
 
     def setup_dialog(self):
         if self.busy:
             return
         dialog = tk.Toplevel(self)
-        dialog.title('かんたん導入 — 専用 venv の作成・修復')
-        dialog.geometry('800x390')
+        dialog.title(tr('かんたん導入 — 専用 venv の作成・修復'))
+        dialog.geometry('850x510')
         dialog.transient(self)
         dialog.grab_set()
-        body = ttk.Frame(dialog, padding=24)
-        body.pack(fill='both', expand=True)
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+        page = ScrollPage(dialog)
+        page.grid(row=0, column=0, sticky='nsew')
+        body = page.body
         body.columnconfigure(1, weight=1)
-        ttk.Label(body, text='学習環境の作成・確認・修復', style='Title.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
+        ttk.Label(body, text=tr('学習環境の作成・確認・修復'), style='Title.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
         try:
             options = json.loads((self.data_dir / 'setup_options.json').read_text(encoding='utf-8'))
         except (OSError, ValueError):
@@ -709,23 +763,25 @@ class App(tk.Tk):
         root = tk.StringVar(value=options.get('root', str(APP_DIR / 'backend')))
         base = tk.StringVar(value=options.get('base_python', ''))
         profile = tk.StringVar(value=options.get('profile', 'cu128'))
-        ttk.Label(body, text='導入先フォルダ', width=21).grid(row=1, column=0, sticky='w', pady=8)
+        ttk.Label(body, text=tr('導入先フォルダ'), width=21).grid(row=1, column=0, sticky='w', pady=8)
         ttk.Entry(body, textvariable=root).grid(row=1, column=1, sticky='ew')
-        ttk.Button(body, text='参照…', command=lambda: self.browse(root, 'dir')).grid(row=1, column=2, padx=6)
-        ttk.Label(body, text='作成用 Python（任意）').grid(row=2, column=0, sticky='w', pady=8)
+        ttk.Button(body, text=tr('参照…'), command=lambda: self.browse(root, 'dir')).grid(row=1, column=2, padx=6)
+        ttk.Label(body, text=tr('作成用 Python（任意）')).grid(row=2, column=0, sticky='w', pady=8)
         ttk.Entry(body, textvariable=base).grid(row=2, column=1, sticky='ew')
-        ttk.Button(body, text='参照…', command=lambda: self.browse(base, 'file')).grid(row=2, column=2, padx=6)
+        ttk.Button(body, text=tr('参照…'), command=lambda: self.browse(base, 'file')).grid(row=2, column=2, padx=6)
         ttk.Label(body, text='PyTorch / CUDA').grid(row=3, column=0, sticky='w', pady=8)
         ttk.Combobox(body, textvariable=profile, values=['cu128', 'cu124'], state='readonly').grid(row=3, column=1, sticky='w')
-        ttk.Label(body, text='初回は専用 venv を新規作成。再実行時は同じ専用環境を確認・修復します。\n作成用 Python は空欄で 3.12 / 3.11 を自動検出。他の用途の venv は流用しません。\ncu128: PyTorch 2.8 / CUDA 12.8（標準）　cu124: PyTorch 2.6 / CUDA 12.4\nインターネット接続と数GB以上の空き容量が必要です。モデル本体は別途選択します。\n再実行時は同じ導入先を指定してください。成功後に GUI の参照先を登録します。', style='Hint.TLabel', wraplength=730).grid(row=4, column=0, columnspan=3, sticky='w', pady=16)
+        ttk.Label(body, text=tr('初回は専用 venv を新規作成。再実行時は同じ専用環境を確認・修復します。\n作成用 Python は空欄で 3.12 / 3.11 を自動検出。他の用途の venv は流用しません。\ncu128: PyTorch 2.8 / CUDA 12.8（標準）\u3000cu124: PyTorch 2.6 / CUDA 12.4\nインターネット接続と数GB以上の空き容量が必要です。モデル本体は別途選択します。\n再実行時は同じ導入先を指定してください。成功後に GUI の参照先を登録します。'), style='Hint.TLabel', wraplength=730).grid(row=4, column=0, columnspan=3, sticky='w', pady=16)
         def begin():
             if not root.get().strip():
-                messagebox.showerror('導入先', '導入先を指定してください', parent=dialog)
+                messagebox.showerror(tr('導入先'), tr('導入先を指定してください'), parent=dialog)
                 return
             target, python, selected = root.get().strip(), base.get().strip(), profile.get()
             dialog.destroy()
             self.start_setup(target, python, selected)
-        ttk.Button(body, text='導入・確認・修復を開始', style='Accent.TButton', command=begin).grid(row=5, column=1, columnspan=2, sticky='e')
+        controls = ttk.Frame(dialog, padding=(24, 12))
+        controls.grid(row=1, column=0, sticky='ew')
+        ttk.Button(controls, text=tr('導入・確認・修復を開始'), style='Accent.TButton', command=begin).pack(side='right')
 
     def start_setup(self, root, base='', profile='cu128'):
         if self.busy:
@@ -738,17 +794,18 @@ class App(tk.Tk):
             if base:
                 argv.extend(['--base-python', base])
             self.operation = 'setup'
-            self.progress_text.set('学習環境を導入・確認・修復中')
+            self.progress_text.set(tr('学習環境を導入・確認・修復中'))
             self.notebook.select(self.monitor)
-            self.append_log(f'\n=== 専用環境の導入・確認・修復 ===\n導入ログ: {folder / "training.log"}\n')
+            self.append_log(tr('\n=== 専用環境の導入・確認・修復 ===\n導入ログ: {p0}\n', p0=folder / 'training.log'))
             self.runner.start(argv, APP_DIR, folder)
-            self.set_busy(True, '学習環境を導入・確認・修復中…')
+            self.set_busy(True, tr('学習環境を導入・確認・修復中…'))
         except (OSError, ValueError) as exc:
-            self.set_busy(False, '導入を開始できません')
-            messagebox.showerror('かんたん導入', str(exc), parent=self)
+            self.set_busy(False, tr('導入を開始できません'))
+            messagebox.showerror(tr('かんたん導入'), str(exc), parent=self)
 
     def set_busy(self, busy, text):
         self.busy = busy
+        self.language_combo.configure(state='disabled' if busy else 'readonly')
         self.start_button.configure(state='disabled' if busy else 'normal')
         self.new_button.configure(state='disabled' if busy else 'normal')
         self.import_button.configure(state='disabled' if busy else 'normal')
@@ -763,9 +820,44 @@ class App(tk.Tk):
 
     def save_ui_preferences(self):
         try:
-            atomic_json(self.data_dir / 'ui_preferences.json', {'completion_sound': self.sound_enabled.get()})
+            self.preferences.update(completion_sound=self.sound_enabled.get(), language=self.language)
+            atomic_json(self.data_dir / 'ui_preferences.json', self.preferences)
+            return True
         except OSError as exc:
-            messagebox.showerror('通知設定の保存', str(exc), parent=self)
+            messagebox.showerror(tr('通知設定の保存'), str(exc), parent=self)
+            return False
+
+    def change_language(self, _=None):
+        language = 'en' if self.language_choice.get() == 'English' else 'ja'
+        if self.busy or language == self.language:
+            self.language_choice.set('日本語' if self.language == 'ja' else 'English')
+            return
+        try:
+            current = self.collect()
+        except ValueError as exc:
+            self.language_choice.set('日本語' if self.language == 'ja' else 'English')
+            messagebox.showerror(tr('設定の確認'), str(exc), parent=self)
+            return
+        saved = copy.deepcopy(self.saved_snapshot)
+        log = self.log.get('1.0', 'end-1c')
+        tab = self.notebook.index(self.notebook.select())
+        old_language = self.language
+        self.language = language
+        if not self.save_ui_preferences():
+            self.language = old_language
+            self.language_choice.set('日本語' if self.language == 'ja' else 'English')
+            return
+        set_language(language)
+        for child in self.winfo_children():
+            child.destroy()
+        self.variables, self.texts, self.field_widgets = {}, {}, {}
+        self.subset_rows = []
+        self.build()
+        self.refresh_projects(current['id'])
+        self.load_project(current)
+        self.saved_snapshot = saved
+        self.notebook.select(tab)
+        self.append_log(log)
 
     def play_notification(self, kind='completed', force=False):
         if not force and not self.sound_enabled.get():
@@ -791,16 +883,16 @@ class App(tk.Tk):
         tracker = self.training_progress
         self.progress.stop()
         self.progress.configure(mode='determinate', maximum=tracker.total, value=tracker.current)
-        head = f'学習進捗 {tracker.current:,} / {tracker.total:,} STEP（{tracker.current / tracker.total:.1%}）'
+        head = tr('学習進捗 {p0:,} / {p1:,} STEP（{p2:.1%}）', p0=tracker.current, p1=tracker.total, p2=tracker.current / tracker.total)
         if tracker.current >= tracker.total:
-            self.progress_text.set(head + ' ｜ 保存・終了処理中')
+            self.progress_text.set(head + tr(' ｜ 保存・終了処理中'))
             return
         remaining = tracker.remaining(now)
         if remaining is None:
-            self.progress_text.set(head + ' ｜ 推定終了時刻を計測・更新中…')
+            self.progress_text.set(head + tr(' ｜ 推定終了時刻を計測・更新中…'))
         else:
             finish = datetime.now().astimezone() + timedelta(seconds=remaining)
-            self.progress_text.set(head + f' ｜ 残り 約{duration(remaining)} ｜ 推定終了 {finish:%m/%d %H:%M:%S}')
+            self.progress_text.set(head + tr(' ｜ 残り 約{p0} ｜ 推定終了 {p1:%m/%d %H:%M:%S}', p0=duration(remaining), p1=finish))
 
     def append_log(self, text):
         self.log.configure(state='normal')
@@ -828,30 +920,30 @@ class App(tk.Tk):
 
     def scan_dataset(self):
         try:
-            self.show_text('データセットの確認', dataset_report(self.collect()))
+            self.show_text(tr('データセットの確認'), dataset_report(self.collect()))
         except (ValueError, OSError) as exc:
-            messagebox.showerror('データセット', str(exc), parent=self)
+            messagebox.showerror(tr('データセット'), str(exc), parent=self)
 
     def check(self):
         try:
             project = self.collect()
             errors = validate(project, self.env, files=True)
-            self.show_text('設定の確認', ('次の項目を修正してください:\n\n' + '\n'.join('• ' + e for e in errors) if errors else 'ファイルパスと設定の整合性: OK\nCUDA / ライブラリは実行環境のチェックで確認できます。') + '\n\n' + dataset_report(project))
+            self.show_text(tr('設定の確認'), (tr('次の項目を修正してください:\n\n') + '\n'.join('• ' + e for e in errors) if errors else tr('ファイルパスと設定の整合性: OK\nCUDA / ライブラリは実行環境のチェックで確認できます。')) + '\n\n' + dataset_report(project))
         except (ValueError, OSError) as exc:
-            messagebox.showerror('設定の確認', str(exc), parent=self)
+            messagebox.showerror(tr('設定の確認'), str(exc), parent=self)
 
     def preview(self):
         try:
             p = self.collect()
-            folder = self.store.directory(p) / 'runs' / '<実行ID>'
-            text = '表示用コマンド（実行時には引数配列で起動）\n' + subprocess.list2cmdline(command(self.env, folder))
+            folder = self.store.directory(p) / 'runs' / tr('<実行ID>')
+            text = tr('表示用コマンド（実行時には引数配列で起動）\n') + subprocess.list2cmdline(command(self.env, folder))
             text += '\n\n# train.toml\n' + dump_toml(training_config(p, folder))
             text += '\n# dataset.toml\n' + dataset_config(p)
             if p['settings']['samples']['enabled']:
                 text += '\n# sample_prompts.txt\n' + sample_prompts_text(p['settings'])
-            self.show_text('学習設定のプレビュー', text)
+            self.show_text(tr('学習設定のプレビュー'), text)
         except (ValueError, OSError) as exc:
-            messagebox.showerror('プレビュー', str(exc), parent=self)
+            messagebox.showerror(tr('プレビュー'), str(exc), parent=self)
 
     def export(self):
         try:
@@ -859,27 +951,27 @@ class App(tk.Tk):
             errors = validate(p)
             if errors:
                 raise ValueError('\n'.join(errors))
-            target = filedialog.askdirectory(title='書き出し先（新しいサブフォルダを作成）', parent=self)
+            target = filedialog.askdirectory(title=tr('書き出し先（新しいサブフォルダを作成）'), parent=self)
             if target:
                 folder = Path(target) / ('moss_config_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:6])
                 write_run(p, self.env, folder)
-                self.show_text('設定を書き出しました', str(folder) + '\n\n再度読み込む場合は「設定を読み込む」で、このフォルダの project_snapshot.json を選んでください。\n\n' + subprocess.list2cmdline(command(self.env, folder)))
+                self.show_text(tr('設定を書き出しました'), str(folder) + tr('\n\n再度読み込む場合は「設定を読み込む」で、このフォルダの project_snapshot.json を選んでください。\n\n') + subprocess.list2cmdline(command(self.env, folder)))
         except (ValueError, OSError) as exc:
-            messagebox.showerror('設定の書き出し', str(exc), parent=self)
+            messagebox.showerror(tr('設定の書き出し'), str(exc), parent=self)
 
     def import_settings(self):
         if self.busy:
             return
         if not self.allow_switch():
             return
-        path = filedialog.askopenfilename(parent=self, title='project_snapshot.json または project.json を選択',
-                                          filetypes=[('MOSS Studio の設定 JSON', '*.json')])
+        path = filedialog.askopenfilename(parent=self, title=tr('project_snapshot.json または project.json を選択'),
+                                          filetypes=[(tr('MOSS Studio の設定 JSON'), '*.json')])
         if path:
             try:
                 source = self.store.load(path)
                 ImportDialog(self, source, path)
             except (OSError, ValueError, TypeError, KeyError) as exc:
-                messagebox.showerror('設定を読み込めません', str(exc), parent=self)
+                messagebox.showerror(tr('設定を読み込めません'), str(exc), parent=self)
 
     def environment_check(self):
         if self.busy:
@@ -887,16 +979,18 @@ class App(tk.Tk):
         try:
             self.probe_settings = self.collect()['settings']
         except ValueError as exc:
-            messagebox.showerror('設定の確認', str(exc), parent=self)
+            messagebox.showerror(tr('設定の確認'), str(exc), parent=self)
             return
         if not Path(self.env['python']).is_file() or not (Path(self.env['sd_scripts']) / 'moss_image_train_network.py').is_file():
-            messagebox.showerror('実行環境', '学習用 Python と MOSS 対応 sd-scripts を指定してください。', parent=self)
+            messagebox.showerror(tr('実行環境'), tr('学習用 Python と MOSS 対応 sd-scripts を指定してください。'), parent=self)
             return
-        self.set_busy(True, '環境をチェック中…')
-        self.progress_text.set('実行環境を確認中')
+        self.set_busy(True, tr('環境をチェック中…'))
+        self.progress_text.set(tr('実行環境を確認中'))
         self.notebook.select(self.monitor)
         env = copy.deepcopy(self.env)
+        language = self.language
         def worker():
+            set_language(language)
             try:
                 self.events.put(('probe', probe(env)))
             except Exception as exc:
@@ -916,11 +1010,13 @@ class App(tk.Tk):
             self.pending_project = copy.deepcopy(project)
             self.pending_env = copy.deepcopy(self.env)
             self.training_progress.reset()
-            self.progress_text.set('実行前チェック中')
-            self.set_busy(True, '環境をチェック中…')
+            self.progress_text.set(tr('実行前チェック中'))
+            self.set_busy(True, tr('環境をチェック中…'))
             self.notebook.select(self.monitor)
-            self.append_log('\n=== 実行前チェック ===\n')
+            self.append_log(tr('\n=== 実行前チェック ===\n'))
+            language = self.language
             def worker():
+                set_language(language)
                 try:
                     info = probe(self.pending_env)
                     errors = probe_errors(info, project['settings'])
@@ -931,7 +1027,7 @@ class App(tk.Tk):
                     self.events.put(('error', str(exc)))
             threading.Thread(target=worker, daemon=True).start()
         except (ValueError, OSError) as exc:
-            messagebox.showerror('学習を開始できません', str(exc), parent=self)
+            messagebox.showerror(tr('学習を開始できません'), str(exc), parent=self)
 
     def begin_run(self, info):
         try:
@@ -942,22 +1038,22 @@ class App(tk.Tk):
             self.append_log(json.dumps(info, ensure_ascii=False, indent=2) + '\n')
             if p['settings']['training']['resume']:
                 resumed = state_info(p['settings']['training']['resume'])
-                self.append_log(f'再開元: {resumed["path"]}\n保存 STEP: {resumed["step"]} / epoch: {resumed["epoch"]}\n')
+                self.append_log(tr('再開元: {p0}\n保存 STEP: {p1} / epoch: {p2}\n', p0=resumed['path'], p1=resumed['step'], p2=resumed['epoch']))
                 if not resumed['snapshot']:
-                    self.append_log('元設定の snapshot がないため設定差の自動比較はできません。\n')
+                    self.append_log(tr('元設定の snapshot がないため設定差の自動比較はできません。\n'))
             if not info.get('triton') and p['settings']['memory']['convrot_int8']:
-                self.append_log('Triton なし: ConvRot INT8 は bf16 fallback を使用するため速度が低下する場合があります。\n')
-            self.append_log(f'実行フォルダ: {folder}\n' + subprocess.list2cmdline(argv) + '\n\n')
+                self.append_log(tr('Triton なし: ConvRot INT8 は bf16 fallback を使用するため速度が低下する場合があります。\n'))
+            self.append_log(tr('実行フォルダ: {p0}\n', p0=folder) + subprocess.list2cmdline(argv) + '\n\n')
             self.operation = 'training'
             self.training_progress.reset()
-            self.progress_text.set('モデル読込・キャッシュ準備中（学習開始後に終了時刻を推定）')
+            self.progress_text.set(tr('モデル読込・キャッシュ準備中（学習開始後に終了時刻を推定）'))
             self.runner.start(argv, env['sd_scripts'], folder)
-            self.set_busy(True, '学習中（編集した設定は次回から適用）')
+            self.set_busy(True, tr('学習中（編集した設定は次回から適用）'))
         except Exception as exc:
-            self.set_busy(False, '起動に失敗しました')
-            self.progress_text.set('起動に失敗しました')
+            self.set_busy(False, tr('起動に失敗しました'))
+            self.progress_text.set(tr('起動に失敗しました'))
             self.append_log(str(exc) + '\n')
-            messagebox.showerror('起動エラー', str(exc), parent=self)
+            messagebox.showerror(tr('起動エラー'), str(exc), parent=self)
 
     def poll(self):
         # Bound work per tick so a noisy trainer cannot starve the UI.
@@ -973,16 +1069,16 @@ class App(tk.Tk):
             elif kind == 'ready':
                 self.begin_run(value)
             elif kind == 'probe':
-                self.set_busy(False, '環境チェック完了')
-                self.progress_text.set('環境チェック完了')
+                self.set_busy(False, tr('環境チェック完了'))
+                self.progress_text.set(tr('環境チェック完了'))
                 self.append_log(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
                 errors = probe_errors(value, self.probe_settings)
-                self.show_text('実行環境', json.dumps(value, ensure_ascii=False, indent=2) + '\n\n' + ('\n'.join(errors) if errors else '必要なパッケージと CUDA / bf16: OK'))
+                self.show_text(tr('実行環境'), json.dumps(value, ensure_ascii=False, indent=2) + '\n\n' + ('\n'.join(errors) if errors else tr('必要なパッケージと CUDA / bf16: OK')))
             elif kind == 'error':
-                self.set_busy(False, '実行前チェックで停止しました')
-                self.progress_text.set('実行前チェックで停止しました')
+                self.set_busy(False, tr('実行前チェックで停止しました'))
+                self.progress_text.set(tr('実行前チェックで停止しました'))
                 self.append_log(value + '\n')
-                messagebox.showerror('実行前チェック', value, parent=self)
+                messagebox.showerror(tr('実行前チェック'), value, parent=self)
             elif kind == 'done':
                 setup = self.operation == 'setup'
                 if setup and value['status'] == 'completed':
@@ -990,8 +1086,8 @@ class App(tk.Tk):
                         self.env = json.loads((self.data_dir / 'environment.json').read_text(encoding='utf-8'))
                     except (OSError, ValueError) as exc:
                         value.update(status='failed', error=str(exc))
-                names = ({'completed': '専用環境の導入・確認が完了しました', 'stopped': '導入を停止しました', 'failed': '導入に失敗しました。ログを確認してください'} if setup else
-                         {'completed': '学習が完了しました', 'stopped': '学習を停止しました', 'failed': '学習に失敗しました。ログを確認してください'})
+                names = ({'completed': tr('専用環境の導入・確認が完了しました'), 'stopped': tr('導入を停止しました'), 'failed': tr('導入に失敗しました。ログを確認してください')} if setup else
+                         {'completed': tr('学習が完了しました'), 'stopped': tr('学習を停止しました'), 'failed': tr('学習に失敗しました。ログを確認してください')})
                 self.set_busy(False, names[value['status']])
                 self.append_log('\n=== ' + names[value['status']] + ' ===\n')
                 if setup:
@@ -1003,7 +1099,7 @@ class App(tk.Tk):
                     if value['status'] in ('completed', 'failed'):
                         self.play_notification(value['status'])
                 if value['status'] == 'failed':
-                    messagebox.showerror('導入エラー' if setup else '学習エラー', f'処理が失敗しました（終了コード: {value.get("returncode", "起動失敗")}）。\n実行・ログ タブと training.log を確認してください。', parent=self)
+                    messagebox.showerror(tr('導入エラー') if setup else tr('学習エラー'), tr('処理が失敗しました（終了コード: {p0}）。\n実行・ログ タブと training.log を確認してください。', p0=value.get('returncode', tr('起動失敗'))), parent=self)
         self.display_progress()
         self.poll_id = self.after(150, self.poll)
 
@@ -1017,9 +1113,9 @@ class App(tk.Tk):
         if self.runner.running:
             self.runner.stop()
             self.stop_button.configure(state='disabled')
-            self.status.set('停止処理中…')
-            self.progress_text.set('停止処理中…')
-            self.append_log('\n導入の停止を要求しました。同じ導入先で再実行すると確認・修復します。\n' if self.operation == 'setup' else '\n停止を要求しました。最後に保存されたチェックポイントから再開できます。未保存の進捗は失われます。\n')
+            self.status.set(tr('停止処理中…'))
+            self.progress_text.set(tr('停止処理中…'))
+            self.append_log(tr('\n導入の停止を要求しました。同じ導入先で再実行すると確認・修復します。\n') if self.operation == 'setup' else tr('\n停止を要求しました。最後に保存されたチェックポイントから再開できます。未保存の進捗は失われます。\n'))
 
     def open_folder(self, folder):
         try:
@@ -1030,7 +1126,7 @@ class App(tk.Tk):
             else:
                 subprocess.Popen(['open' if __import__('sys').platform == 'darwin' else 'xdg-open', str(folder)])
         except OSError as exc:
-            messagebox.showerror('フォルダ', str(exc), parent=self)
+            messagebox.showerror(tr('フォルダ'), str(exc), parent=self)
 
     def open_project(self):
         self.open_folder(self.store.directory(self.project))
@@ -1039,7 +1135,7 @@ class App(tk.Tk):
         if self.last_folder:
             self.open_folder(self.last_folder)
         else:
-            messagebox.showinfo('実行フォルダ', 'このプロジェクトにはまだ実行履歴がありません。', parent=self)
+            messagebox.showinfo(tr('実行フォルダ'), tr('このプロジェクトにはまだ実行履歴がありません。'), parent=self)
 
     def history(self):
         folder = self.store.directory(self.project) / 'runs'
@@ -1049,21 +1145,28 @@ class App(tk.Tk):
                 status = json.loads((run / 'status.json').read_text(encoding='utf-8'))
                 lines.append(f'{run.name}: {status["status"]} / exit={status.get("returncode", "—")}\n{run}\n')
             except (OSError, ValueError):
-                lines.append(f'{run.name}: 状態不明（設定または起動途中）\n{run}\n')
-        self.show_text('実行履歴', '\n'.join(lines) or 'まだ実行履歴はありません。')
+                lines.append(tr('{p0}: 状態不明（設定または起動途中）\n{p1}\n', p0=run.name, p1=run))
+        self.show_text(tr('実行履歴'), '\n'.join(lines) or tr('まだ実行履歴はありません。'))
+
+    def combobox_wheel(self, event):
+        self.wheel(event)
+        return 'break'
 
     def wheel(self, event):
-        selected = self.notebook.select()
-        for page in self.pages.values():
-            if str(page) == selected:
-                # Text fields retain their own scrolling.
-                if not isinstance(event.widget, tk.Text):
-                    page.canvas.yview_scroll(int(-event.delta / 120), 'units')
-                break
+        widget = event.widget
+        # Posted combobox listboxes may be Tcl widgets without a Python wrapper.
+        # Let them, text fields and trees keep their own scrolling.
+        if not isinstance(widget, tk.Misc) or isinstance(widget, (tk.Text, tk.Listbox, ttk.Treeview)):
+            return
+        while widget is not None:
+            if isinstance(widget, ScrollPage):
+                widget.canvas.yview_scroll(int(-event.delta / 120), 'units')
+                return
+            widget = widget.master
 
     def close(self):
         if self.busy:
-            messagebox.showinfo('処理中', '導入・学習中は「停止」で処理を終了してから閉じてください。環境チェック中は完了までお待ちください。', parent=self)
+            messagebox.showinfo(tr('処理中'), tr('導入・学習中は「停止」で処理を終了してから閉じてください。環境チェック中は完了までお待ちください。'), parent=self)
             return
         if self.allow_switch():
             self.destroy()
@@ -1079,6 +1182,6 @@ def main():
         # pythonw has no console: always present startup failures to the user.
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror('MOSS Studio — 起動エラー', str(exc), parent=root)
+        messagebox.showerror(tr('MOSS Studio — 起動エラー'), str(exc), parent=root)
         root.destroy()
         raise

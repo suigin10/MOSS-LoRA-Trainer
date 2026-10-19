@@ -53,6 +53,25 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(duration(0.1), '00:00:01')
         self.assertEqual(duration(-1), '00:00:00')
 
+    def test_average_uses_elapsed_deltas_after_resume_not_global_steps(self):
+        p = TrainingProgress()
+        p.feed('steps: 90%|##| 1525/1700 [03:20<23:21, 8.01s/it]', now=100)
+        self.assertIsNone(p.average_seconds)
+        p.feed('steps: 93%|##| 1582/1700 [09:30<13:40, 6.95s/it]', now=101)
+        self.assertAlmostEqual(p.average_seconds, 370 / 57)
+        p.feed('steps: 93%|##| 1582/1700 [09:30<13:40, 6.95s/it]', now=102)
+        self.assertAlmostEqual(p.average_seconds, 370 / 57)
+        p.reset()
+        self.assertIsNone(p.average_seconds)
+
+    def test_average_includes_checkpoint_pause_and_waits_for_elapsed_clock(self):
+        p = TrainingProgress()
+        p.feed('steps: 0%|| 0/10 [00:00<?, ?it/s]', now=0)
+        p.feed('steps: 10%|| 1/10 [00:06<00:54, 6s/it]', now=6)
+        self.assertEqual(p.average_seconds, 6)
+        p.feed('steps: 20%|| 2/10 [00:22<01:28, 11s/it]', now=22)
+        self.assertEqual(p.average_seconds, 11)
+
 
 if __name__ == '__main__':
     unittest.main()

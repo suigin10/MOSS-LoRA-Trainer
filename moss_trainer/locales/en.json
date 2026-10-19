@@ -59,7 +59,6 @@
   "VRAM 12GB 向けの開始設定。キャッシュ時の VRAM を削減": "Starting setting for 12GB VRAM. Reduces VRAM use during caching.",
   "bf16 が高精度。int8 は Triton / CUDA が必要": "bf16 has higher precision. int8 requires Triton / CUDA.",
   "CPU にスワップするブロック数": "Blocks to swap to CPU",
-  "0〜40。VRAM 12GB では 20 から、メモリ不足時は 36 へ": "Range: 0-40. Start with 20 for 12GB VRAM; try 36 if memory runs out.",
   "メモリ削減のため通常 ON": "Usually ON to reduce memory use.",
   "Block swap / Unsloth と併用不可": "Incompatible with block swap / Unsloth.",
   "Block swap / CPU offload と併用不可": "Incompatible with block swap / CPU offload.",
@@ -262,7 +261,6 @@
   "再開指定を解除": "Clear resume",
   "100 steps ごとに state も保存（初期値）": "Default: save state every 100 steps",
   "VRAM 容量別プリセット": "VRAM presets",
-  "VRAM 12GB: INT8 / swap 20　　16GB: INT8 / swap 0　　24GB以上: bf16 / swap 0\n機種名ではなく搭載 VRAM 容量で選択してください。すべて batch 1・checkpointing・ディスクキャッシュ ON。\n必要なメモリは画像・キャプションでも変わります。8GB 向けプリセットは用意していません。": "12GB: INT8 / swap 20    16GB: INT8 / swap 0    24GB+: bf16 / swap 0\nChoose by VRAM capacity. All presets use batch 1, checkpointing and disk caching.\nImage and caption sizes also affect memory use. No 8GB preset is provided.",
   "設定待ち": "Ready to configure",
   "▶ 学習を開始": "▶ Start training",
   "■ 停止": "■ Stop",
@@ -406,5 +404,16 @@
   "＋ 追加 / コピー": "+ Add / Copy",
   "最終stateの追加学習では総Epoch上限を保存済みEpochより大きくしてください": "To extend a final state, set the total epoch limit above the saved epoch.",
   "中断時・最終保存のstateを日時順に表示します。総上限を編集して追加学習できます。": "Lists interrupted and final state saves by date. Edit the total limit to extend training.",
-  "stateから再開・追加学習…": "Resume / extend from state…"
+  "stateから再開・追加学習…": "Resume / extend from state…",
+  "0〜40。12GB向け推奨は16。余裕が足りない場合は20以上へ。画像・生成条件でも必要量は変わります": "Range: 0-40. Start with 16 for 12GB VRAM; increase to 20 or more if needed. Images and sampling settings affect memory use.",
+  "VRAM 12GB: INT8 / swap 16　　16GB: INT8 / swap 0　　24GB以上: bf16 / swap 0\n機種名ではなく搭載 VRAM 容量で選択してください。すべて batch 1・checkpointing・ディスクキャッシュ ON。\n必要なメモリは画像・キャプションでも変わります。8GB 向けプリセットは用意していません。": "12GB: INT8 / swap 16    16GB: INT8 / swap 0    24GB+: bf16 / swap 0\nChoose by VRAM capacity. All presets use batch 1, checkpointing and disk caching.\nImage and caption sizes also affect memory use. No 8GB preset is provided.",
+  "今回の経過 — ｜ 学習平均 — s/it": "Elapsed this run — | Training average — s/it",
+  "VRAM（GPU全体・専用メモリ）: 学習開始後に計測": "VRAM (whole GPU, dedicated memory): measured after launch",
+  "今回の経過 {p0}（準備・保存含む） ｜ 学習平均 {p1} s/it": "Elapsed this run {p0} (including setup / saving) | Training average {p1} s/it",
+  "VRAM（GPU全体・専用メモリ）: ": "VRAM (whole GPU, dedicated memory): ",
+  "GPU {p0}: {p1:.1f} / {p2:.1f} GiB（観測最大 {p3:.1f}）": "GPU {p0}: {p1:.1f} / {p2:.1f} GiB (observed peak {p3:.1f})",
+  "VRAM: 取得不可（nvidia-smi未対応または取得待ち）": "VRAM: unavailable (nvidia-smi unsupported or awaiting reading)",
+  "CPU処理スレッド数": "CPU processing threads",
+  "CPU処理スレッド数は1以上の整数にしてください": "CPU processing threads must be an integer of 1 or more.",
+  "DataLoader workersとは別設定で、増やしても速くなるとは限りません": "Separate from DataLoader workers; more threads may not be faster."
 }

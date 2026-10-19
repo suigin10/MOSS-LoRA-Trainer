@@ -4,9 +4,9 @@
 
 A Japanese / English desktop GUI for MOSS-Image LoRA training on Windows. Includes isolated backend setup, project management, VRAM presets, resume support, and an estimated completion time. Choose **English** in the header to switch languages. See the [English quick start](docs/QUICK_START.en.md).
 
-**0.1.1 正式版**です。プロジェクトの追加・削除、最終stateからの追加学習、総STEP / Epoch上限の拡張に対応しています。英語GUI、Caption確認、柔軟なLoRA保存、最新stateの保持設定も利用できます。
+**0.1.2 正式版**です。経過時間・平均s/it・VRAM使用量の表示、CPU処理スレッド数の設定、コンソールが残らないGUI起動を追加しました。プロジェクト管理、stateからの再開・追加学習、日本語 / English、柔軟なLoRA保存にも対応しています。
 
-> **RTX 4070（VRAM 12GB）で実機検証済み**（提供者による確認）。今回の更新についても提供者による動作確認済みです。自動テストと検証範囲は [VALIDATION.md](VALIDATION.md) を参照してください。
+> **RTX 4070（VRAM 12GB）で実機検証済み**（提供者による確認）。0.1.1までの更新は提供者による動作確認済みです。今回の計測表示は実機確認待ちです。自動テストと検証範囲は [VALIDATION.md](VALIDATION.md) を参照してください。
 
 ## ダウンロード・導入
 
@@ -52,7 +52,7 @@ VRAMだけで動作を保証するものではありません。画像解像度�
 | Optimizer / scheduler | AdamW8bit / constant |
 | 保存 | LoRAは100 STEPごと（変更可能）。stateは最新1つを保持、正常終了時にも保存 |
 | 解像度 / batch | 1024 / 1 |
-| 12GB向け設定 | DiT・QwenともConvRot INT8、block swap 20、ディスクキャッシュ |
+| 12GB向け設定 | DiT・QwenともConvRot INT8、block swap 16、ディスクキャッシュ |
 | サンプル生成 | 初期OFF。1024×1024、50 steps、CFG 3、生成shift 5 |
 
 初期値は調整の開始点です。学習対象・データ量に応じて変更してください。
@@ -80,3 +80,14 @@ GUIのソースと同梱通知音は [MIT License](LICENSE) です。学習エ�
 - [OpenMOSS/MOSS-Image](https://github.com/OpenMOSS/MOSS-Image)：対象モデル
 
 本プロジェクトは独立したGUIであり、上記プロジェクトの公式製品ではありません。sd-scriptsのソースはリポジトリに同梱せず、セットアップ時に取得します。
+
+## 学習中の計測
+
+- 今回の経過時間は学習プロセスの起動から計測し、モデル読込・キャッシュ・保存を含みます。停止・終了時に固定します。
+- 学習平均 s/it は今回の実行で観測した最初と最新のSTEPログの差分から算出します。再開前のSTEPは含めず、同じSTEPの重複ログは二重計上しません。学習中の保存・サンプル生成の待ち時間を含む区間平均です。計測が揃うまでは — を表示します。
+- VRAMは約3秒間隔でnvidia-smiから取得するGPU全体の専用メモリ使用量・総容量・今回の観測最大値です。他アプリの使用量も含み、共有GPUメモリは含みません。最大値は瞬間的なピークを保証しません。複数GPUは個別表示し、取得できない環境でも学習は継続します。
+- 12GB向けの新規デフォルト・プリセットはswap 16。提供者のRTX 4070では約10.8/12GB（約1割の余裕）でしたが、画像・キャプション・生成条件で変わります。VRAM不足なら20以上へ増やしてください。既存プロジェクトの数値は自動変更しません。
+
+CPU処理スレッド数は「04 VRAM・速度」で変更できます。初期値2、1以上の整数。DataLoader workersとは別で、増やしても速くなるとは限りません。追加インストールは不要です。プロジェクト・設定書き出しに保存し、未設定の旧設定は2で読み込みます。保存済みの数値は保持します。
+
+start.bat / install.batはGUIを別プロセスで起動し、起動用cmdを終了します（既に開いている端末から実行した場合、その端末は閉じません）。GUI起動失敗時はダイアログを表示し、data/startup.logに詳細を保存します。MOSS_TRAINER_DATA指定時はそのフォルダに保存します。診断用にはpython launch.pyでコンソール起動できます。

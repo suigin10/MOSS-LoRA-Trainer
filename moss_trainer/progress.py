@@ -34,6 +34,8 @@ class TrainingProgress:
         self.total = None
         self.deadline = None
         self.samples = deque(maxlen=20)
+        self.first_measurement = None
+        self.average_seconds = None
 
     def feed(self, text, now=None):
         now = time.monotonic() if now is None else now
@@ -50,6 +52,14 @@ class TrainingProgress:
         if not self.samples or current > self.samples[-1][1]:
             self.samples.append((now, current))
         details = match[3]
+        # Use differences within this invocation, never cumulative resumed STEP.
+        elapsed = clock_seconds(details.split('<', 1)[0])
+        if elapsed is not None:
+            if self.first_measurement is None:
+                self.first_measurement = (current, elapsed)
+            first_step, first_elapsed = self.first_measurement
+            if current > first_step and elapsed > first_elapsed:
+                self.average_seconds = (elapsed - first_elapsed) / (current - first_step)
         remaining = None
         if '<' in details:
             remaining = clock_seconds(details.split('<', 1)[1].split(',', 1)[0])

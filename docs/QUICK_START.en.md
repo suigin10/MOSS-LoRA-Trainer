@@ -1,6 +1,6 @@
 # MOSS Studio — English quick start
 
-This is the **0.1.1 stable release**, with project management and training extensions from final states. The provider has confirmed operation of this update and previously verified training on an RTX 4070 (12 GB VRAM). See [validation notes](../VALIDATION.md) for the automated test scope.
+This is the **0.1.2 stable release**, adding elapsed time, measured average s/it, device-wide VRAM monitoring, editable CPU processing threads (default 2), a 12GB swap-16 preset and console-free GUI startup. The provider has confirmed operation through version 0.1.1 and previously verified training on an RTX 4070 (12 GB VRAM). Automated tests and monitoring checks are described in the [validation notes](../VALIDATION.md); extended GPU training with the new monitor has not been tested by the maintainer.
 
 ## Install and launch
 
@@ -39,3 +39,9 @@ The compatibility launcher leaves the installed sd-scripts source intact. Resume
 App labels, help text, dialogs, validation messages and ETA are translated. Backend/installer process logs retain their original language. Native Windows dialog controls follow the OS language.
 
 Automated checks include GUI behavior and a CPU AdamW / Accelerate save-resume comparison with constant, linear and cosine schedulers. This test build's MOSS GPU training and AdamW8bit resume remain to be checked on real training data. If a problem persists, keep `training.log`, `train.toml`, `resume_source.json` and the original state's `train_state.json`.
+
+The new monitor uses nvidia-smi every ~3 seconds; device-wide memory includes other applications and excludes shared system memory. Observed peak is sampled, not an exact maximum. Elapsed time includes loading and saving; average s/it uses elapsed differences between training STEP logs from this invocation only. Existing project settings are preserved. Increase swap from 16 to 20 or more if memory is tight.
+
+CPU processing threads are editable in 04 VRAM / Speed (default 2; positive integer). More threads may not be faster. This is separate from DataLoader workers and requires no extra installation. Project copies and exported settings retain the value; older projects with no saved value default to 2. Existing saved values are preserved.
+
+The batch launchers detach the GUI without retaining a console window. An existing terminal used to invoke a launcher stays open. Startup failures are shown in a dialog and appended to data/startup.log (or MOSS_TRAINER_DATA). Use python launch.py for console diagnostics.

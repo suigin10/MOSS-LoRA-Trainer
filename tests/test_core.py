@@ -31,7 +31,7 @@ class CoreTests(unittest.TestCase):
     def test_12gb_defaults_valid(self):
         self.assertEqual(validate(self.p), [])
         s = self.p['settings']
-        self.assertEqual(s['memory']['blocks_to_swap'], 20)
+        self.assertEqual(s['memory']['blocks_to_swap'], 16)
         self.assertTrue(s['memory']['convrot_int8_text_encoder'])
         self.assertEqual(s['training']['network_alpha'], 1)
 
@@ -262,6 +262,35 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             write_run(self.p, env, folder)
 
+    def test_cpu_threads_round_trip_as_launcher_option_not_trainer_option(self):
+        self.p['settings']['memory']['num_cpu_threads_per_process'] = 4
+        env = {'python': sys.executable, 'sd_scripts': str(self.root)}
+        folder = self.root / 'threads-run'
+        argv = write_run(self.p, env, folder)
+        index = argv.index('--num_cpu_threads_per_process')
+        self.assertEqual(argv[index + 1], '4')
+        self.assertLess(index, argv.index(str(Path(__file__).resolve().parents[1] / 'moss_trainer' / 'resume_bridge.py')))
+        self.assertEqual(json.loads((folder / 'command.json').read_text(encoding='utf-8')), argv)
+        self.assertNotIn('num_cpu_threads_per_process', tomllib.loads((folder / 'train.toml').read_text(encoding='utf-8')))
+        loaded = self.store.load(folder / 'project_snapshot.json')
+        self.assertEqual(loaded['settings']['memory']['num_cpu_threads_per_process'], 4)
+        copied = self.store.create('threads copy', loaded)
+        self.assertEqual(copied['settings']['memory']['num_cpu_threads_per_process'], 4)
+        del loaded['settings']['memory']['num_cpu_threads_per_process']
+        atomic_json(folder / 'legacy.json', loaded)
+        self.assertEqual(self.store.load(folder / 'legacy.json')['settings']['memory']['num_cpu_threads_per_process'], 2)
+        loaded['settings']['memory']['num_cpu_threads_per_process'] = 1
+        atomic_json(folder / 'legacy.json', loaded)
+        self.assertEqual(self.store.load(folder / 'legacy.json')['settings']['memory']['num_cpu_threads_per_process'], 1)
+
+    def test_cpu_threads_reject_invalid_values(self):
+        env = {'python': sys.executable, 'sd_scripts': str(self.root)}
+        for value in (0, -1, 1.5, True, '4'):
+            self.p['settings']['memory']['num_cpu_threads_per_process'] = value
+            self.assertTrue(validate(self.p), value)
+            with self.assertRaises(ValueError):
+                command(env, self.root, self.p['settings'])
+
     def test_lora_save_intervals_are_independent_of_state_retention(self):
         self.p['settings']['training'].update(save_every_n_steps=37, save_every_n_epochs=2, keep_latest_state_only=True)
         config = training_config(self.p, self.root / 'lora-saves')
@@ -271,7 +300,7 @@ class CoreTests(unittest.TestCase):
         self.assertNotIn('save_last_n_epochs', config)
 
     def test_all_presets_are_consistent(self):
-        for name, blocks in [('12GB', 20), ('16GB', 0), ('24GB+', 0)]:
+        for name, blocks in [('12GB', 16), ('16GB', 0), ('24GB+', 0)]:
             apply_preset(self.p['settings'], name)
             self.assertEqual(validate(self.p), [])
             self.assertEqual(self.p['settings']['memory']['blocks_to_swap'], blocks)

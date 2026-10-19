@@ -19,11 +19,66 @@ class GuiTests(unittest.TestCase):
         self.app.update()
 
     def test_startup_and_preset_controls(self):
-        self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 20)
+        self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
         self.app.set_preset('24GB+')
         self.assertFalse(self.app.collect()['settings']['memory']['convrot_int8'])
         self.app.set_preset('12GB')
         self.assertTrue(self.app.collect()['settings']['memory']['convrot_int8'])
+
+    def test_cpu_threads_are_editable_and_in_command_preview(self):
+        variable = self.app.variables[('memory', 'num_cpu_threads_per_process')]
+        self.assertEqual(variable.get(), '2')
+        variable.set('4')
+        with patch.object(self.app, 'show_text') as show:
+            self.app.preview()
+        self.assertIn('--num_cpu_threads_per_process 4', show.call_args.args[1])
+        self.assertNotIn('num_cpu_threads_per_process =', show.call_args.args[1])
+        self.app.set_preset('12GB')
+        self.assertEqual(self.app.collect()['settings']['memory']['num_cpu_threads_per_process'], 4)
+
+    def test_short_model_page_stays_at_top_after_wheel_and_resize(self):
+        self.app.geometry('1220x1050')
+        page = self.app.pages['model']
+        self.app.notebook.select(page)
+        self.app.update()
+        for direction in (-30, 30, -30):
+            page.canvas.yview_scroll(direction, 'units')
+            self.app.update()
+            self.assertLessEqual(abs(page.canvas.canvasy(0)), 2)
+        self.app.geometry('1000x700')
+        self.app.update()
+        page.canvas.yview_moveto(1)
+        self.app.geometry('1220x1050')
+        self.app.update()
+        self.assertLessEqual(abs(page.canvas.canvasy(0)), 2)
+
+    def test_bottom_actions_remain_visible_when_tabs_and_metrics_resize(self):
+        for geometry in ('1220x880', '1000x700'):
+            self.app.geometry(geometry)
+            self.app.status.set('学習中（編集した設定は次回から適用） / Training in progress; changes apply to the next run.')
+            self.app.metrics_text.set('今回の経過 01:20:30（準備・保存含む） ｜ 学習平均 6.49 s/it')
+            self.app.vram_text.set('VRAM（GPU全体・専用メモリ）: GPU 0: 10.8 / 12.0 GiB（観測最大 11.0）')
+            for tab in self.app.notebook.tabs():
+                self.app.notebook.select(tab)
+                self.app.update()
+                actions = self.app.start_button.master
+                for button in actions.winfo_children():
+                    bottom = button.winfo_rooty() - self.app.winfo_rooty() + button.winfo_height()
+                    right = button.winfo_rootx() - self.app.winfo_rootx() + button.winfo_width()
+                    self.assertTrue(button.winfo_ismapped(), (geometry, tab))
+                    self.assertLessEqual(bottom, self.app.winfo_height(), (geometry, tab))
+                    self.assertLessEqual(right, self.app.winfo_width(), (geometry, tab))
+                self.assertGreater(self.app.notebook.winfo_height(), 100)
+
+    def test_initial_height_fits_small_screen(self):
+        with patch.object(tk.Tk, 'winfo_screenheight', return_value=720):
+            small = App(Path(self.temp.name) / 'small-screen')
+        self.addCleanup(small.destroy)
+        small.update()
+        self.assertEqual(small.winfo_height(), 620)
+        self.assertEqual(small.minsize()[1], 620)
+        bottom = small.start_button.winfo_rooty() - small.winfo_rooty() + small.start_button.winfo_height()
+        self.assertLessEqual(bottom, small.winfo_height())
 
     def test_wheel_over_choices_scrolls_page_without_changing_training_values(self):
         for group, key in [('training', 'optimizer_type'), ('training', 'lr_scheduler'),
@@ -114,7 +169,7 @@ class GuiTests(unittest.TestCase):
         dialog.name.set('デフォルト新規')
         dialog.create()
         self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 16)
-        self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 20)
+        self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
 
     def test_busy_locks_project_controls(self):
         self.app.set_busy(True, 'テスト中')
@@ -322,6 +377,26 @@ class GuiTests(unittest.TestCase):
         self.assertIn('推定終了', self.app.progress_text.get())
         self.assertEqual(str(self.app.progress['mode']), 'determinate')
         self.app.set_busy(False, '待機')
+
+    def test_run_metrics_show_resumed_average_gpu_memory_and_freeze_on_stop(self):
+        self.app.run_started = 100
+        self.app.training_progress.feed('steps: 90%|| 1525/1700 [03:20<?, 8s/it]', now=100)
+        self.app.training_progress.feed('steps: 93%|| 1582/1700 [09:30<?, 7s/it]', now=101)
+        with patch('moss_trainer.gui.time.monotonic', return_value=130), patch.object(self.app.gpu_monitor, 'snapshot', return_value=[(0, 11059, 12288, 11264)]):
+            self.app.display_metrics()
+        self.assertIn('00:00:30', self.app.metrics_text.get())
+        self.assertIn('6.49 s/it', self.app.metrics_text.get())
+        self.assertIn('10.8 / 12.0 GiB', self.app.vram_text.get())
+        self.assertIn('11.0', self.app.vram_text.get())
+        self.app.operation = 'training'
+        self.app.events.put(('done', {'status': 'stopped'}))
+        self.app.after_cancel(self.app.poll_id)
+        with patch('moss_trainer.gui.time.monotonic', return_value=140):
+            self.app.poll()
+        with patch('moss_trainer.gui.time.monotonic', return_value=200):
+            self.app.display_metrics()
+        self.assertIn('00:00:40', self.app.metrics_text.get())
+        self.assertIn('取得不可', self.app.vram_text.get())
 
     def test_completion_and_failure_notify_but_manual_stop_is_silent(self):
         with patch.object(self.app, 'play_notification') as sound, patch('moss_trainer.gui.messagebox.showerror'):

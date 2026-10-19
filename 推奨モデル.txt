@@ -14,9 +14,10 @@ GUIプリセット: 12GB
 DiT: moss_image_base_int8_convrot.safetensors
 Qwen: qwen3.5_9b_int8_convrot.safetensors
 VAE: flux2-vae.safetensors
-初期設定: INT8 / INT8、CPU block swap 20、batch 1、ディスクキャッシュ ON。
+初期設定: INT8 / INT8、CPU block swap 16、batch 1、ディスクキャッシュ ON。
 ダウンロード合計: 約15.5GB。VRAM 12GBのビデオカードでは、まずこの構成から開始してください。
-メモリ不足時は block swap を36へ上げるか、学習・生成解像度を下げて調整します。
+提供者のRTX 4070ではswap 16で約10.8/12GB（約1割の余裕）を観測しました。環境共通の保証値ではありません。
+メモリ不足時は block swap を20以上へ上げるか、学習・生成解像度を下げて調整します。
 
 【VRAM 16GB】
 GUIプリセット: 16GB

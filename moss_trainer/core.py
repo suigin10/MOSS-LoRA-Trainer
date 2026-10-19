@@ -68,7 +68,7 @@ FIELDS = {
         'convrot_int8': ('DiT: ConvRot INT8', True, None, 'VRAM 12GB 向けの開始設定。量子化済みチェックポイントも自動検出されます'),
         'convrot_int8_text_encoder': ('Qwen: ConvRot INT8', True, None, 'VRAM 12GB 向けの開始設定。キャッシュ時の VRAM を削減'),
         'convrot_int8_bwd': ('INT8 backward', 'bf16', ['bf16', 'int8'], 'bf16 が高精度。int8 は Triton / CUDA が必要'),
-        'blocks_to_swap': ('CPU にスワップするブロック数', 20, None, '0〜40。VRAM 12GB では 20 から、メモリ不足時は 36 へ'),
+        'blocks_to_swap': ('CPU にスワップするブロック数', 16, None, '0〜40。12GB向け推奨は16。余裕が足りない場合は20以上へ。画像・生成条件でも必要量は変わります'),
         'gradient_checkpointing': ('Gradient checkpointing', True, None, 'メモリ削減のため通常 ON'),
         'cpu_offload_checkpointing': ('CPU offload checkpointing', False, None, 'Block swap / Unsloth と併用不可'),
         'unsloth_offload_checkpointing': ('Unsloth offload checkpointing', False, None, 'Block swap / CPU offload と併用不可'),
@@ -79,6 +79,7 @@ FIELDS = {
         'attn_mode': ('Attention', 'torch', ['torch', 'xformers', 'flash'], '通常は torch を推奨。xformers / flash は追加パッケージが必要'),
         'split_attn': ('Split attention', False, None, 'xformers 選択時は自動で ON になり、必須のため固定されます'),
         'max_data_loader_n_workers': ('DataLoader workers', 2, None, 'Windows 向けに少数の worker を使用'),
+        'num_cpu_threads_per_process': ('CPU処理スレッド数', 2, None, 'DataLoader workersとは別設定で、増やしても速くなるとは限りません'),
         'persistent_data_loader_workers': ('Worker をエポック間で維持', True, None, 'workers=0 の場合は OFF'),
         'compile': ('torch.compile', False, None, '追加環境が必要。まず OFF で動作を確認'),
     },
@@ -125,7 +126,7 @@ def defaults():
 def apply_preset(settings, preset):
     m = settings['memory']
     m.update(convrot_int8=preset != '24GB+', convrot_int8_text_encoder=preset != '24GB+',
-             blocks_to_swap=20 if preset == '12GB' else 0,
+             blocks_to_swap=16 if preset == '12GB' else 0,
              cpu_offload_checkpointing=False, unsloth_offload_checkpointing=False,
              gradient_checkpointing=True, cache_latents=True, cache_latents_to_disk=True,
              cache_text_encoder_outputs=True, cache_text_encoder_outputs_to_disk=True)
@@ -268,6 +269,7 @@ def validate(project, env=None, files=False):
     require(not (m['cache_latents'] and (d['color_aug'] or d['random_crop'])), tr('Latent キャッシュと色拡張 / ランダムクロップは併用できません'))
     require(not (m['cache_text_encoder_outputs'] and d['shuffle_caption']), tr('TE キャッシュとキャプションシャッフルは併用できません'))
     require(m['max_data_loader_n_workers'] >= 0, tr('DataLoader workers は 0 以上にしてください'))
+    require(m['num_cpu_threads_per_process'] >= 1, tr('CPU処理スレッド数は1以上の整数にしてください'))
     require(not (m['max_data_loader_n_workers'] == 0 and m['persistent_data_loader_workers']), tr('workers=0 の場合は worker 維持を OFF にしてください'))
     require(m['attn_mode'] != 'xformers' or m['split_attn'], tr('xformers には Split attention が必要です'))
     for key in ('logit_std', 'discrete_flow_shift', 'sigmoid_scale', 'mode_scale', 'embedder_lr'):
@@ -452,6 +454,7 @@ def training_config(project, run_dir):
     for group in ('model', 'training', 'memory'):
         config.update({k: v for k, v in s[group].items() if v != ''})
     config.pop('keep_latest_state_only', None)
+    config.pop('num_cpu_threads_per_process', None)  # accelerate launch option, not a trainer argument
     if not s['training']['resume']:
         config.pop('skip_until_initial_step', None)
     if config['max_train_steps'] > 0:
@@ -509,10 +512,13 @@ def sample_prompts_text(settings):
     return '\n'.join(lines) + '\n'
 
 
-def command(env, run_dir):
+def command(env, run_dir, settings=None):
+    threads = settings.get('memory', {}).get('num_cpu_threads_per_process', 2) if settings else 2
+    if type(threads) is not int or threads < 1:
+        raise ValueError(tr('CPU処理スレッド数は1以上の整数にしてください'))
     return [env['python'], '-u', '-m', 'accelerate.commands.launch', '--num_processes', '1',
             '--num_machines', '1', '--mixed_precision', 'bf16', '--dynamo_backend', 'no',
-            '--num_cpu_threads_per_process', '1', str(Path(__file__).resolve().with_name('resume_bridge.py')),
+            '--num_cpu_threads_per_process', str(threads), str(Path(__file__).resolve().with_name('resume_bridge.py')),
             str(Path(env['sd_scripts']).resolve()),
             '--state-policy', str(Path(run_dir).resolve() / 'state_policy.json'),
             '--config_file', str(Path(run_dir).resolve() / 'train.toml')]
@@ -531,10 +537,11 @@ def write_run(project, env, run_dir):
     atomic_json(run_dir / 'state_policy.json', {
         'keep_latest_state_only': project['settings']['training']['keep_latest_state_only'],
         'recalculate_scheduler': bool(info and resume_limit_changed(project, info))})
-    atomic_json(run_dir / 'command.json', command(env, run_dir))
+    argv = command(env, run_dir, project['settings'])
+    atomic_json(run_dir / 'command.json', argv)
     if project['settings']['training']['resume']:
         atomic_json(run_dir / 'resume_source.json', {key: value for key, value in info.items() if key != 'snapshot'})
-    return command(env, run_dir)
+    return argv
 
 
 def caption_audit(folder, extension='.txt', multiline=True):

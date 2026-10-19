@@ -21,6 +21,7 @@ from .core import (FIELDS, ENV_DEFAULTS, ProjectStore, Runner, apply_preset, ato
                    probe_errors, sample_prompts_text, state_info, discover_states,
                    resume_differences, training_config, validate, write_run)
 from .progress import TrainingProgress, duration
+from .telemetry import GpuMonitor
 
 APP_DIR = Path(__file__).resolve().parent.parent
 
@@ -35,8 +36,19 @@ class ScrollPage(ttk.Frame):
         self.canvas.pack(side='left', fill='both', expand=True)
         self.body = ttk.Frame(self.canvas, padding=20)
         item = self.canvas.create_window((0, 0), window=self.body, anchor='nw')
-        self.body.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
-        self.canvas.bind('<Configure>', lambda e: self.canvas.itemconfigure(item, width=e.width))
+        def update_region(event=None):
+            height = max(self.body.winfo_reqheight(), self.canvas.winfo_height())
+            self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), height))
+            # A short form must stay at the top when wheeled or resized.
+            if self.body.winfo_reqheight() <= self.canvas.winfo_height():
+                self.canvas.yview_moveto(0)
+
+        def resize_canvas(event):
+            self.canvas.itemconfigure(item, width=event.width)
+            update_region()
+
+        self.body.bind('<Configure>', update_region)
+        self.canvas.bind('<Configure>', resize_canvas)
         self.body.columnconfigure(1, weight=1)
 
 
@@ -293,8 +305,9 @@ class App(tk.Tk):
     def __init__(self, data_dir=None):
         super().__init__()
         self.title('MOSS Studio — LoRA Trainer')
-        self.geometry('1220x880')
-        self.minsize(1000, 700)
+        initial_height = min(880, max(480, self.winfo_screenheight() - 100))
+        self.geometry(f'1220x{initial_height}')
+        self.minsize(1000, min(700, initial_height))
         self.configure(bg='#f1f6f8')
         self.data_dir = Path(data_dir or os.environ.get('MOSS_TRAINER_DATA', APP_DIR / 'data')).resolve()
         self.store = ProjectStore(self.data_dir / 'projects')
@@ -306,6 +319,9 @@ class App(tk.Tk):
         self.operation = 'training'
         self.training_progress = TrainingProgress()
         self.last_progress_tick = 0
+        self.gpu_monitor = GpuMonitor()
+        self.run_started = None
+        self.run_finished = None
         try:
             preferences = json.loads((self.data_dir / 'ui_preferences.json').read_text(encoding='utf-8'))
         except (OSError, ValueError):
@@ -378,7 +394,10 @@ class App(tk.Tk):
         style.configure('Hint.TLabel', font=('Yu Gothic UI', 9), foreground='#627684')
         style.configure('TNotebook', background='#f1f6f8', bordercolor='#bbd1d9')
         style.configure('TNotebook.Tab', padding=(13, 10), background='#dfecef', foreground='#315667')
-        style.map('TNotebook.Tab', background=[('selected', '#137b68'), ('active', '#c9e8e2')], foreground=[('selected', '#ffffff')])
+        style.map('TNotebook.Tab', background=[('selected', '#137b68'), ('active', '#c9e8e2')],
+                  foreground=[('selected', '#ffffff')],
+                  padding=[('selected', (17, 12)), ('!selected', (13, 8))],
+                  font=[('selected', ('Yu Gothic UI', 10, 'bold')), ('!selected', ('Yu Gothic UI', 10))])
         style.configure('TLabelframe', padding=10, bordercolor='#bbd1d9')
         style.configure('TLabelframe.Label', foreground='#176d60', font=('Yu Gothic UI', 10, 'bold'))
         for widget in ('TCheckbutton', 'TRadiobutton'):
@@ -393,8 +412,10 @@ class App(tk.Tk):
         style.configure('Vertical.TScrollbar', background='#c5dce0', troughcolor='#edf3f5', arrowcolor='#315667')
 
     def build(self):
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(3, weight=1)
         header = ttk.Frame(self, padding=(24, 16), style='Header.TFrame')
-        header.pack(fill='x')
+        header.grid(row=0, column=0, sticky='ew')
         ttk.Label(header, text='MOSS Studio', style='HeaderTitle.TLabel').pack(side='left')
         ttk.Label(header, text='  /  MOSS-Image LoRA Trainer', style='HeaderSubtitle.TLabel').pack(side='left', padx=12)
         ttk.Button(header, text=tr('実行環境'), style='Header.TButton', command=self.environment).pack(side='right')
@@ -404,8 +425,8 @@ class App(tk.Tk):
         self.language_combo.pack(side='right', padx=8)
         self.language_combo.bind('<<ComboboxSelected>>', self.change_language)
         ttk.Label(header, text='Language', style='HeaderSubtitle.TLabel').pack(side='right')
-        projectbar = ttk.Frame(self, padding=(24, 0, 24, 12))
-        projectbar.pack(fill='x')
+        projectbar = ttk.Frame(self, padding=(24, 14, 24, 12))
+        projectbar.grid(row=1, column=0, sticky='ew')
         ttk.Label(projectbar, text=tr('プロジェクト')).pack(side='left', padx=(0, 10))
         self.project_combo = ttk.Combobox(projectbar, state='readonly', width=32)
         self.project_combo.pack(side='left')
@@ -419,14 +440,14 @@ class App(tk.Tk):
         ttk.Button(projectbar, text=tr('設定を保存'), command=self.save).pack(side='left')
         ttk.Button(projectbar, text=tr('保存先を開く'), command=self.open_project).pack(side='right')
         info = ttk.Frame(self, padding=(24, 0, 24, 10))
-        info.pack(fill='x')
+        info.grid(row=2, column=0, sticky='ew')
         quick = ttk.Frame(info)
         quick.pack(fill='x')
         self.memory_summary = tk.StringVar()
         ttk.Label(quick, textvariable=self.memory_summary, style='Subtitle.TLabel').pack(side='left')
         ttk.Label(info, text=tr('CUDA / bf16 対応の NVIDIA GPU が対象です。VRAM 容量に応じた開始値を選べます。CPU スワップには十分な RAM が必要です。'), style='Hint.TLabel').pack(anchor='w')
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill='both', expand=True, padx=24)
+        self.notebook.grid(row=3, column=0, sticky='nsew', padx=24)
         self.pages = {}
         tabs = [('model', tr('01 モデル')), ('dataset', tr('02 データセット')), ('training', tr('03 学習')), ('memory', tr('04 VRAM・速度')), ('flow', tr('05 Flow・LoRA 詳細')), ('samples', tr('06 サンプル'))]
         for group, title in tabs:
@@ -460,7 +481,7 @@ class App(tk.Tk):
                 self.field(page.body, group, key, spec, row)
                 row += 1
             if group == 'memory':
-                ttk.Label(page.body, text=tr('VRAM 12GB: INT8 / swap 20\u3000\u300016GB: INT8 / swap 0\u3000\u300024GB以上: bf16 / swap 0\n機種名ではなく搭載 VRAM 容量で選択してください。すべて batch 1・checkpointing・ディスクキャッシュ ON。\n必要なメモリは画像・キャプションでも変わります。8GB 向けプリセットは用意していません。'), style='Hint.TLabel', wraplength=800).grid(row=row, column=0, columnspan=3, sticky='w', pady=12)
+                ttk.Label(page.body, text=tr('VRAM 12GB: INT8 / swap 16\u3000\u300016GB: INT8 / swap 0\u3000\u300024GB以上: bf16 / swap 0\n機種名ではなく搭載 VRAM 容量で選択してください。すべて batch 1・checkpointing・ディスクキャッシュ ON。\n必要なメモリは画像・キャプションでも変わります。8GB 向けプリセットは用意していません。'), style='Hint.TLabel', wraplength=800).grid(row=row, column=0, columnspan=3, sticky='w', pady=12)
         for key in ('convrot_int8', 'convrot_int8_text_encoder', 'blocks_to_swap'):
             self.variables[('memory', key)].trace_add('write', lambda *args: self.update_summary())
         self.variables[('dataset', 'batch_size')].trace_add('write', lambda *args: self.update_summary())
@@ -469,18 +490,22 @@ class App(tk.Tk):
             self.variables[('memory', key)].trace_add('write', lambda *args: self.sync_attention())
         self.build_monitor()
         timingbar = ttk.Frame(self, padding=(24, 8, 24, 0))
-        timingbar.pack(fill='x')
+        timingbar.grid(row=4, column=0, sticky='ew')
         ttk.Label(timingbar, textvariable=self.progress_text, style='Subtitle.TLabel').pack(anchor='w')
+        ttk.Label(timingbar, textvariable=self.metrics_text, style='Hint.TLabel', wraplength=940).pack(anchor='w')
+        ttk.Label(timingbar, textvariable=self.vram_text, style='Hint.TLabel', wraplength=940).pack(anchor='w')
         footer = ttk.Frame(self, padding=(24, 12))
-        footer.pack(fill='x')
+        footer.grid(row=5, column=0, sticky='ew')
         self.status = tk.StringVar(value=tr('設定待ち'))
-        ttk.Label(footer, textvariable=self.status).pack(side='left')
-        self.start_button = ttk.Button(footer, text=tr('▶ 学習を開始'), style='Accent.TButton', command=self.start)
+        ttk.Label(footer, textvariable=self.status, wraplength=940).pack(anchor='w', pady=(0, 6))
+        actions = ttk.Frame(footer)
+        actions.pack(fill='x')
+        self.start_button = ttk.Button(actions, text=tr('▶ 学習を開始'), style='Accent.TButton', command=self.start)
         self.start_button.pack(side='right', padx=(8, 0))
-        self.stop_button = ttk.Button(footer, text=tr('■ 停止'), command=self.stop, state='disabled')
+        self.stop_button = ttk.Button(actions, text=tr('■ 停止'), command=self.stop, state='disabled')
         self.stop_button.pack(side='right', padx=8)
-        ttk.Button(footer, text=tr('設定を書き出す'), command=self.export).pack(side='right', padx=4)
-        ttk.Button(footer, text=tr('設定を確認'), command=self.check).pack(side='right', padx=4)
+        ttk.Button(actions, text=tr('設定を書き出す'), command=self.export).pack(side='right', padx=4)
+        ttk.Button(actions, text=tr('設定を確認'), command=self.check).pack(side='right', padx=4)
 
     def field(self, parent, group, key, spec, row):
         label, default, choices, hint = spec
@@ -567,6 +592,8 @@ class App(tk.Tk):
         ttk.Checkbutton(alerts, text=tr('学習終了時に通知音（完了・失敗）'), variable=self.sound_enabled, command=self.save_ui_preferences).pack(side='left')
         ttk.Button(alerts, text=tr('音を試す'), command=lambda: self.play_notification(force=True)).pack(side='left', padx=8)
         self.progress_text = tk.StringVar(value=tr('学習待機中'))
+        self.metrics_text = tk.StringVar(value=tr('今回の経過 — ｜ 学習平均 — s/it'))
+        self.vram_text = tk.StringVar(value=tr('VRAM（GPU全体・専用メモリ）: 学習開始後に計測'))
         self.progress = ttk.Progressbar(page, mode='indeterminate')
         self.progress.pack(fill='x', pady=(0, 8))
         self.log = tk.Text(page, bg='#122d3b', fg='#d8eee7', insertbackground='white', font=('Consolas', 10), wrap='word', state='disabled',
@@ -601,6 +628,7 @@ class App(tk.Tk):
             widget.delete('1.0', 'end')
             widget.insert('1.0', defaults()[group][key])
         self.training_progress.reset()
+        self.reset_metrics()
         self.progress.stop()
         self.progress_text.set(tr('学習待機中'))
         self.status.set(tr('プロジェクトがありません。「追加 / コピー」から作成してください。'))
@@ -624,6 +652,7 @@ class App(tk.Tk):
         runs = sorted((self.store.directory(project) / 'runs').glob('*'))
         self.last_folder = runs[-1] if runs else None
         self.training_progress.reset()
+        self.reset_metrics()
         self.progress.stop()
         self.progress.configure(mode='indeterminate', value=0)
         self.progress_text.set(tr('学習待機中'))
@@ -928,6 +957,7 @@ class App(tk.Tk):
         self.saved_snapshot = saved
         self.notebook.select(tab)
         self.append_log(log)
+        self.display_metrics()
 
     def play_notification(self, kind='completed', force=False):
         if not force and not self.sound_enabled.get():
@@ -942,6 +972,29 @@ class App(tk.Tk):
         except (OSError, RuntimeError, tk.TclError):
             # Sound settings must not affect the result of training or future UI updates.
             pass
+
+    def reset_metrics(self):
+        self.gpu_monitor.stop()
+        self.run_started = self.run_finished = None
+        self.metrics_text.set(tr('今回の経過 — ｜ 学習平均 — s/it'))
+        self.vram_text.set(tr('VRAM（GPU全体・専用メモリ）: 学習開始後に計測'))
+
+    def display_metrics(self):
+        if self.run_started is None:
+            return
+        end = self.run_finished if self.run_finished is not None else time.monotonic()
+        average = self.training_progress.average_seconds
+        rate = '—' if average is None else f'{average:.2f}'
+        self.metrics_text.set(tr('今回の経過 {p0}（準備・保存含む） ｜ 学習平均 {p1} s/it',
+                                 p0=duration(end - self.run_started), p1=rate))
+        rows = self.gpu_monitor.snapshot()
+        if rows:
+            self.vram_text.set(tr('VRAM（GPU全体・専用メモリ）: ') + ' ｜ '.join(
+                tr('GPU {p0}: {p1:.1f} / {p2:.1f} GiB（観測最大 {p3:.1f}）',
+                   p0=i, p1=used / 1024, p2=total / 1024, p3=peak / 1024)
+                for i, used, total, peak in rows))
+        else:
+            self.vram_text.set(tr('VRAM: 取得不可（nvidia-smi未対応または取得待ち）'))
 
     def display_progress(self, force=False):
         if not self.busy or self.operation != 'training' or self.training_progress.total is None or self.runner.stopping:
@@ -1006,7 +1059,7 @@ class App(tk.Tk):
         try:
             p = self.collect()
             folder = self.store.directory(p) / 'runs' / tr('<実行ID>')
-            text = tr('表示用コマンド（実行時には引数配列で起動）\n') + subprocess.list2cmdline(command(self.env, folder))
+            text = tr('表示用コマンド（実行時には引数配列で起動）\n') + subprocess.list2cmdline(command(self.env, folder, p['settings']))
             text += '\n\n# train.toml\n' + dump_toml(training_config(p, folder))
             text += '\n# dataset.toml\n' + dataset_config(p)
             if p['settings']['samples']['enabled']:
@@ -1025,7 +1078,7 @@ class App(tk.Tk):
             if target:
                 folder = Path(target) / ('moss_config_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:6])
                 write_run(p, self.env, folder)
-                self.show_text(tr('設定を書き出しました'), str(folder) + tr('\n\n再度読み込む場合は「設定を読み込む」で、このフォルダの project_snapshot.json を選んでください。\n\n') + subprocess.list2cmdline(command(self.env, folder)))
+                self.show_text(tr('設定を書き出しました'), str(folder) + tr('\n\n再度読み込む場合は「設定を読み込む」で、このフォルダの project_snapshot.json を選んでください。\n\n') + subprocess.list2cmdline(command(self.env, folder, p['settings'])))
         except (ValueError, OSError) as exc:
             messagebox.showerror(tr('設定の書き出し'), str(exc), parent=self)
 
@@ -1118,6 +1171,10 @@ class App(tk.Tk):
             self.training_progress.reset()
             self.progress_text.set(tr('モデル読込・キャッシュ準備中（学習開始後に終了時刻を推定）'))
             self.runner.start(argv, env['sd_scripts'], folder)
+            self.run_started = time.monotonic()
+            self.run_finished = None
+            self.gpu_monitor.start()
+            self.display_metrics()
             self.set_busy(True, tr('学習中（編集した設定は次回から適用）'))
         except Exception as exc:
             self.set_busy(False, tr('起動に失敗しました'))
@@ -1151,6 +1208,10 @@ class App(tk.Tk):
                 messagebox.showerror(tr('実行前チェック'), value, parent=self)
             elif kind == 'done':
                 setup = self.operation == 'setup'
+                if not setup:
+                    self.run_finished = time.monotonic()
+                    self.gpu_monitor.stop()
+                    self.display_metrics()
                 if setup and value['status'] == 'completed':
                     try:
                         self.env = json.loads((self.data_dir / 'environment.json').read_text(encoding='utf-8'))
@@ -1171,9 +1232,12 @@ class App(tk.Tk):
                 if value['status'] == 'failed':
                     messagebox.showerror(tr('導入エラー') if setup else tr('学習エラー'), tr('処理が失敗しました（終了コード: {p0}）。\n実行・ログ タブと training.log を確認してください。', p0=value.get('returncode', tr('起動失敗'))), parent=self)
         self.display_progress()
+        if self.busy and self.operation == 'training':
+            self.display_metrics()
         self.poll_id = self.after(150, self.poll)
 
     def destroy(self):
+        self.gpu_monitor.stop()
         if getattr(self, 'poll_id', None):
             self.after_cancel(self.poll_id)
             self.poll_id = None
@@ -1253,6 +1317,8 @@ def main():
             app.after(100, app.setup_dialog)
         app.mainloop()
     except Exception as exc:
+        if '--windowed' in sys.argv:
+            raise  # The detached launcher logs the error and shows a native dialog.
         # pythonw has no console: always present startup failures to the user.
         root = tk.Tk()
         root.withdraw()

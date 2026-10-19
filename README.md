@@ -9,7 +9,7 @@ A Japanese desktop GUI for MOSS-Image LoRA training on Windows. Includes isolate
 ## ダウンロード・導入
 
 1. [Releases](https://github.com/suigin10/MOSS-LoRA-Trainer/releases) から `MOSS-LoRA-Trainer.zip` をダウンロードして展開します。
-2. **Python 3.12（64bit）**を用意し、`install.bat` を起動します。
+2. **Python 3.12（64bit）** を用意し、`install.bat` を起動します。
 3. 「導入・確認・修復を開始」を押します。初回は専用venvを作成し、sd-scriptsとCUDA版PyTorchなどを導入します。
 4. モデル・学習画像を指定して、`start.bat` から利用します。
 

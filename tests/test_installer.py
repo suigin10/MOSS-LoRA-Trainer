@@ -15,7 +15,7 @@ class InstallerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=os.environ.get('MOSS_TEST_TMP'))
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.data = self.root / 'data'
         self.data.mkdir()
         self.old = {'python': 'previous/python.exe', 'sd_scripts': 'previous/scripts'}

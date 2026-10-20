@@ -4,7 +4,7 @@ Version 0.2.0 adds automatic Triton installation and a separate Kohaku backend. 
 
 Triton is paired with the selected PyTorch version and checked by compiling and executing a small GPU kernel. The GUI and existing global Python environments are not used for backend installation.
 
-Kohaku training and resume have been tested with real model weights on an RTX 4070 12GB. The user completed 100 steps plus a 50-step continuation. A short INT8 / ckpt-resident benchmark measured about 4.10 s/step and 10.3 GiB device VRAM. Clean dependency installation and generated-image quality comparisons remain unverified. Existing sd-scripts projects keep their original backend.
+Kohaku training and resume have been tested with real model weights on an RTX 4070 12GB. The user confirmed a completed 1500-step training run with the previous settings on their own RTX 4070 12GB (reported 2026-10-21). A 100-step run and a 50-step continuation were also confirmed. A short INT8 / ckpt-resident benchmark measured about 4.10 s/step and 10.3 GiB device VRAM. Clean dependency installation and generated-image quality comparisons remain unverified. Existing sd-scripts projects keep their original backend.
 
 Kohaku uses KohakuMoss License 1.0, based on Apache-2.0 with an additional naming condition. The primary product branding is **MOSS Studio with Kohaku**. See the full license in `licenses/KohakuMoss-LICENSE.txt` and the Japanese integration guide [USER_GUIDE.ja.md#kohakuバックエンド](USER_GUIDE.ja.md#kohakuバックエンド).
 

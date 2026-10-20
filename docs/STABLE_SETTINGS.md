@@ -57,10 +57,12 @@ INT8のDiTとQwenモデルを指定してください。autoは保存精度を�
 VRAM不足時はckpt-ring4-actoff-optstream-gradoffへ変更できます。
 AdamW8bitを選ぶ場合はGPU状態・fused_step=Falseを使用します。自動チューニングとtorch.compileはOFFです。
 
+旧設定で1500STEPの学習完走を、利用者のRTX 4070 12GB実機で確認済みです（2026-10-21報告）。
 従来のRank16/Alpha1・AdamW8bit・constantで、RTX 4070 12GBの短期診断は約4.10秒/step・約10.3GiBでした。
 これは新しい32/32・AdamW・cosineの速度・VRAM・画質を測定した値ではありません。
 torch.compileは従来構成で再計算エラーが発生したためOFFを維持します。
 
+The user confirmed a completed 1500-step training run with the previous settings on their RTX 4070 12GB (reported 2026-10-21).
 Previous short benchmark: about 4.10 s/step and 10.3 GiB on RTX 4070 12GB with rank16/alpha1, AdamW8bit and constant.
 The new rank32/alpha32, AdamW, cosine recipe has not yet been benchmarked or quality-compared.
 

@@ -34,6 +34,13 @@ Mouse wheel input over a closed dropdown scrolls the settings page without chang
 
 Use **Count images / captions** to see recognized captions as N / M. A missing count of 0 means no captions are missing. Put `image.png` and `image.txt` in the same folder and save text as UTF-8. Select the folder containing the images directly; parent folders are not scanned recursively. The report shows expected filenames, empty text and encoding errors. It does not rename or edit your files.
 
+For caption wording, start with natural-language descriptions or a hybrid of tags and natural language. Briefly describe the visible subject, clothing, composition and background. Examples:
+
+- Natural language: `A girl with blue hair is standing on a beach, wearing a white dress.`
+- Tags + natural language: `character_token, blue hair, white dress. A girl is standing on a beach with the ocean in the background.`
+
+Keep any character identifier token consistent across captions. There is no need to add unseen traits or excessive quality tags.
+
 Use **Delete** to remove the selected project from the list. After confirmation, its entire folder moves to `data/projects/_trash/`. External models and images stay in place; files stored inside the project folder move with it. Unsaved edits are discarded. An empty project list stays empty across restarts; use **Add / Copy** to create a project again.
 
 For sd-scripts, the recommended starting plan is 1500 steps, learning rate 1e-4, rank 16, alpha 1, and AdamW8bit with a constant scheduler, saving models and resume states every 100 steps. Apply these values manually; new projects use the Kohaku defaults described above. You can change values or select epoch mode for new training.

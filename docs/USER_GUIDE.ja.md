@@ -61,6 +61,15 @@ sd-scripts の環境要件を優先してください。GUI と学習用 Python 
 
 例は `image.png` と同じ場所の `image.txt` です。`image.png.txt` や `image.txt.txt` は読み取り対象になりません。見つからない場合は、期待する名前を確認画面で表示します。画像が入っているフォルダ自体を選択してください。親フォルダからの再帰走査は行いません。`10_subject` のようなフォルダ名でも、repeat数は画面の「Repeat」で明示的に設定します。確認処理は画像・Captionを変更しません。
 
+### キャプションの書き方
+
+キャプションは、自然文、または「タグ＋自然文」のハイブリッドを目安にしてください。画像の対象・服装・構図・背景などを、見えている内容に沿って簡潔に記述します。
+
+- 自然文: `A girl with blue hair is standing on a beach, wearing a white dress.`
+- タグ＋自然文: `character_token, blue hair, white dress. A girl is standing on a beach with the ocean in the background.`
+
+キャラクター名などの識別用トークンを使う場合は、各キャプションで同じ表記に揃えてください。写っていない特徴や過剰な画質タグを無理に足す必要はありません。
+
 ## 初期値と変更方法
 
 新規学習は32/32・AdamW8bit・cosine、学習上限4000STEP・200STEPごと保存が初期値です。Kohaku公式レシピを参考に、Optimizerは省メモリのAdamW8bit、保存間隔は200STEPにしています。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。

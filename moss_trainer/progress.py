@@ -5,7 +5,7 @@ import re
 import time
 
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
-STEPS = re.compile(r'\bsteps:\s*\d+%\|[^\r\n]*?\|\s*(\d+)/(\d+)\s*\[([^\]\r\n]*)\]')
+STEPS = re.compile(r'\b(?:steps|train):\s*\d+%\|[^\r\n]*?\|\s*(\d+)/(\d+)\s*\[([^\]\r\n]*)\]')
 
 
 def duration(seconds):

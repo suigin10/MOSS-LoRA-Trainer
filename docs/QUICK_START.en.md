@@ -1,11 +1,25 @@
+# MOSS Studio with Kohaku v0.2.0
+
+Version 0.2.0 adds automatic Triton installation and a separate Kohaku backend. Open **Start MOSS Studio.bat**, select English, then use **Easy Setup**. Choose sd-scripts (cu128/torch 2.8 or cu124/torch 2.6) or Kohaku (cu130/torch 2.13). Kohaku requires a compatible NVIDIA driver and Visual Studio C++ Build Tools. Select the installed engine in **04 VRAM / Speed** before starting training.
+
+Triton is paired with the selected PyTorch version and checked by compiling and executing a small GPU kernel. The GUI and existing global Python environments are not used for backend installation.
+
+Kohaku training and resume have been tested with real model weights on an RTX 4070 12GB. The user completed 100 steps plus a 50-step continuation. A short INT8 / ckpt-resident benchmark measured about 4.10 s/step and 10.3 GiB device VRAM. Clean dependency installation and generated-image quality comparisons remain unverified. Existing sd-scripts projects keep their original backend.
+
+Kohaku uses KohakuMoss License 1.0, based on Apache-2.0 with an additional naming condition. The primary product branding is **MOSS Studio with Kohaku**. See the full license in `licenses/KohakuMoss-LICENSE.txt` and the Japanese integration guide [USER_GUIDE.ja.md#kohakuバックエンド](USER_GUIDE.ja.md#kohakuバックエンド).
+
+This integration supports step-based LoRA training, disk caches, AdamW/AdamW8bit, checkpoint resume and step-based sampling. It rejects epoch limits, initial LoRA weights, per-module settings, Text embedder training, random augmentation and inline sample options. Kohaku uses its own MOSS objective and resolution planner. Its resume checkpoints cannot be shared with sd-scripts. Checkpoints are under `runs/<run>/kohaku/checkpoints`; LoRA exports are also copied to `runs/<run>/models` before old checkpoints are pruned.
+
+The following guide describes the existing sd-scripts workflow:
+
 # MOSS Studio — English quick start
 
-This is the **0.1.2 stable release**, adding elapsed time, measured average s/it, device-wide VRAM monitoring, editable CPU processing threads (default 2), a 12GB swap-16 preset and console-free GUI startup. The provider has confirmed operation through version 0.1.1 and previously verified training on an RTX 4070 (12 GB VRAM). Automated tests and monitoring checks are described in the [validation notes](../VALIDATION.md); extended GPU training with the new monitor has not been tested by the maintainer.
+This is the **v0.2.0 release**, adding elapsed time, measured average s/it, device-wide VRAM monitoring, editable CPU processing threads (default 2), a 12GB swap-16 preset and console-free GUI startup. The provider has confirmed operation through version 0.1.1 and previously verified training on an RTX 4070 (12 GB VRAM). Automated tests and monitoring checks are described in the [validation notes](../CONTRIBUTING.md#検証状況); see the development notes for automated tests, GPU benchmarks and remaining limitations.
 
 ## Install and launch
 
 1. Extract the ZIP. To update an existing installation, close the app and copy the contents of `MOSS-LoRA-Trainer` over the existing application folder. Keep `data/` and `backend/`.
-2. Install 64-bit Python 3.12 if needed. Run `start.bat` and choose **English** in the header. Your language choice is saved for future launches.
+2. Install 64-bit Python 3.12 if needed. Run `Start MOSS Studio.bat` and choose **English** in the header. Your language choice is saved for future launches.
 3. For a new backend, open **Easy setup** and start setup. It creates a dedicated venv on first use and checks or repairs that same environment on later runs. An existing working installation does not need a new venv for this GUI update.
 4. In **Model**, browse for the MOSS-Image DiT, Qwen3.5-9B text encoder and FLUX.2 VAE. Use bf16 or supported ConvRot INT8 weights; W4A8 GPTQ Qwen is unsupported. Select the first shard for sharded models.
 5. Add image folders in **Dataset**. Place `.txt` captions beside images with matching base names. Choose a VRAM preset, check settings and start training.

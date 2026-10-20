@@ -15,6 +15,9 @@ class GuiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=os.environ.get('MOSS_TEST_TMP'))
         self.addCleanup(self.temp.cleanup)
         self.app = App(Path(self.temp.name) / 'data')
+        # These regression cases exercise the existing sd-scripts workflow.
+        self.app.variables[('memory', 'backend')].set('sd-scripts')
+        self.app.save()
         self.addCleanup(self.app.destroy)
         self.app.update()
 

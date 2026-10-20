@@ -58,6 +58,8 @@ class EnglishGuiTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.data_dir = Path(self.temp.name) / 'data'
         self.app = App(self.data_dir)
+        self.app.variables[('memory', 'backend')].set('sd-scripts')
+        self.app.save()
         self.addCleanup(self.app.destroy)
         self.addCleanup(set_language, 'ja')
         self.app.update()
@@ -81,7 +83,7 @@ class EnglishGuiTests(unittest.TestCase):
         self.assertEqual(self.app.saved_snapshot, saved)
         self.assertEqual(training_config(self.app.collect(), Path(self.temp.name) / 'run'), config)
         self.assertIn('元のログ {literal}', self.app.log.get('1.0', 'end'))
-        self.assertEqual(self.app.start_button.cget('text'), '▶ Start training')
+        self.assertEqual(self.app.start_button.cget('text'), 'Start training')
         self.assertEqual(self.app.notebook.tab(0, 'text'), '01 Model')
         self.app.sound_enabled.set(False)
         self.app.save_ui_preferences()
@@ -91,13 +93,13 @@ class EnglishGuiTests(unittest.TestCase):
         restarted = App(self.data_dir)
         try:
             self.assertEqual(restarted.language, 'en')
-            self.assertEqual(restarted.start_button.cget('text'), '▶ Start training')
+            self.assertEqual(restarted.start_button.cget('text'), 'Start training')
             self.assertFalse(restarted.sound_enabled.get())
         finally:
             restarted.destroy()
         self.switch('日本語')
         self.assertEqual(self.app.collect(), before)
-        self.assertEqual(self.app.start_button.cget('text'), '▶ 学習を開始')
+        self.assertEqual(self.app.start_button.cget('text'), '学習を開始')
 
     def test_english_settings_errors_and_progress(self):
         self.switch()

@@ -1,18 +1,18 @@
-# MOSS Studio 利用ガイド
+# MOSS Studio with Kohaku 利用ガイド
 
-MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 3.11 以上で `start.bat` をダブルクリックして起動します。GUI 自体に追加の pip パッケージは不要です（tkinter が必要）。学習環境は「かんたん導入」で作成できます。モデルファイルは別途用意してください。
+MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 3.11 以上で `Start MOSS Studio.bat` をダブルクリックして起動します。GUI 自体に追加の pip パッケージは不要です（tkinter が必要）。学習環境は「かんたん導入」で作成できます。モデルファイルは別途用意してください。
 
-対象GPUは CUDA / bf16 対応の NVIDIA ビデオカードです。推奨設定は特定の機種名ではなく、VRAM容量別に用意しています。初期値は VRAM 12GB のビデオカード向けで、16GB・24GB以上のプリセットも選べます。
+対象GPUは CUDA / bf16 対応の NVIDIA ビデオカードです。推奨設定は特定の機種名ではなく、VRAM容量別に用意しています。新規プロジェクトのエンジンはKohakuです。初期値は VRAM 12GB のビデオカード向けで、16GB・24GB以上のプリセットも選べます。
 
 画面はネイビーとティールを基調にしています。白い欄は直接入力、淡いティールの欄はクリックして選択、グレーの欄は無効状態です。選択中のタブや主要操作は濃いティールで表示します。
 
 設定ページ内のホイール操作はページのスクロールに使います。閉じたOptimizer等のドロップダウン上でも値は変わりません。値を変える場合はリストを開いて選択してください。
 
-**モデル選びは同梱の [推奨モデル.txt](../推奨モデル.txt) を参照してください。** VRAM 12GB・16GB・24GB以上ごとの具体的なファイル名、ダウンロード先、GUIプリセット、bf16分割ファイルの指定方法を記載しています。
+**モデル選びは同梱の [設定・モデルガイド](STABLE_SETTINGS.md) を参照してください。** VRAM 12GB・16GB・24GB以上ごとの具体的なファイル名、ダウンロード先、GUIプリセット、bf16分割ファイルの指定方法を記載しています。
 
 ## かんたん導入（推奨）
 
-**Python 3.12（64bit）をインストール済みなら、`install.bat` を開いて「導入・確認・修復を開始」を押すだけです。** GUI 右上の「かんたん導入」からも同じ操作ができます。
+**Python 3.12（64bit）をインストール済みなら、`Start MOSS Studio.bat` を開き、GUI右上の「かんたん導入」からエンジンを選び「導入・確認・修復を開始」を押します。** GUI 右上の「かんたん導入」からも同じ操作ができます。
 
 - 初回だけ専用 venv と sd-scripts を作成します。2 回目以降は、この GUI が作った同じ専用環境を確認・修復します。他用途の venv やグローバルパッケージは流用しません。
 - sd-scripts は公式リポジトリの ZIP から取得するため Git は不要です。
@@ -24,11 +24,11 @@ MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 
 
 取得にはインターネット接続と数GB以上の空き容量が必要です。通常の導入先は `backend/moss-env/`、venv はその中の `venv/` です。再実行時にも同じ導入先・CUDA プロファイルを初期表示します。取得済み sd-scripts は版を維持し、依存パッケージを確認・修復します。修復時には専用 venv 内のパッケージが変更されることがあります。失敗時に GUI の参照パスは変更しませんが、修復中のパッケージ変更をロールバックする方式ではありません。
 
-ログは `data/setup-logs/`、取得した sd-scripts の commit と環境情報は `installation.json`、パッケージ一覧は `packages.txt` に残します。モデル本体はダウンロードしません。Triton は互換性が環境に依存するため自動導入せず、INT8 は bf16 fallback を利用できます。
+ログは `data/setup-logs/`、取得した sd-scripts の commit と環境情報は `installation.json`、パッケージ一覧は `packages.txt` に残します。モデル本体はダウンロードしません。開発版0.2ではTritonをPyTorchの版に合わせて自動導入し、GPUカーネルのコンパイル・実行を確認します。Kohakuの導入と対応範囲は [Kohakuバックエンド](#kohakuバックエンド) を参照してください。
 
 ## 最初に使うとき
 
-1. ZIP を展開し、`start.bat` を起動します。コマンドからは `python launch.py`。
+1. ZIP を展開し、`Start MOSS Studio.bat` を起動します。コマンドからは `python launch.py`。
 2. 「かんたん導入」で新規環境を作ります。手動で準備した環境を使う場合は、右上の「実行環境」で Python と sd-scripts フォルダを指定できます。
 3. 「保存して環境チェック」で CUDA / bf16 / パッケージを確認します。
 4. 「モデル」タブの各「参照…」で、DiT、Qwen3.5-9B、FLUX.2 VAE をファイル選択ダイアログから指定します。手入力もできます。
@@ -90,7 +90,7 @@ LoRAの保存間隔は自由に変更できます。例: 50 STEPごと、250 STE
 
 この方針はstateの保存回数ではなく保持数を減らします。保存時の書込み負荷と、一時的に新旧2つ分のディスク空き容量は必要です。古いstateを削除できなかった場合は警告をログに出し、学習を継続します。
 
-### VRAM プリセット
+### VRAM プリセット（sd-scripts）
 
 | GPU VRAM | DiT / Qwen | CPU block swap |
 |---|---|---|
@@ -188,7 +188,7 @@ tensorboard/                   TensorBoard ログ
 python -m unittest discover -s tests -v
 ```
 
-RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）。別途、GUI 起動、ファイル選択の呼び出し、プロジェクト作成・コピー、STEP/epoch 切替、プリセット、TOML、設定競合、state 候補・復元、ログ、テスト子プロセスの起動・停止を自動テストしています。導入処理は、新しい venv の実作成、模擬ダウンロードによる導入・修復経路、失敗時の参照パス維持、設定登録をテストしています。自動テストでは実モデルのGPU学習・生成・state復元を実行していません。詳細は [検証範囲](../VALIDATION.md) を参照してください。
+RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）。別途、GUI 起動、ファイル選択の呼び出し、プロジェクト作成・コピー、STEP/epoch 切替、プリセット、TOML、設定競合、state 候補・復元、ログ、テスト子プロセスの起動・停止を自動テストしています。導入処理は、新しい venv の実作成、模擬ダウンロードによる導入・修復経路、失敗時の参照パス維持、設定登録をテストしています。自動テストでは実モデルのGPU学習・生成・state復元を実行していません。詳細は [開発・検証](../CONTRIBUTING.md#検証状況) を参照してください。
 
 ## 参考資料
 
@@ -197,3 +197,72 @@ RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）
 - [sd-scripts 学習引数](https://github.com/kohya-ss/sd-scripts/blob/main/library/args.py) / [train_network.py](https://github.com/kohya-ss/sd-scripts/blob/main/train_network.py): config と state 再開の仕様確認。
 
 参照確認日: 2026-10-19。sd-scripts は利用者が指定する外部依存です。更新による変更は学習ログで確認してください。
+
+
+## Kohakuバックエンド
+
+詳細な設定値とモデル選びは [設定ガイド](STABLE_SETTINGS.md) を参照してください。以下はKohaku固有の手順と対応範囲です。
+
+### 導入
+
+1. `Start MOSS Studio.bat` を開き、右上の「かんたん導入」を押します。
+2. 学習エンジンを `sd-scripts` または `kohaku` にします。
+3. sd-scriptsはcu128（PyTorch 2.8）またはcu124（2.6）。Kohakuを選ぶとcu130（2.13）へ切り替わります。Kohakuには対応するNVIDIAドライバとVisual Studio Build ToolsのC++ワークロードが必要です。
+4. 「導入・確認・修復を開始」を押します。専用環境だけを変更します。sd-scriptsは `backend/moss-env`、Kohakuは `backend/kohaku-env` です。
+5. GUIの「04 VRAM・速度」で学習エンジンを選択します。環境を導入しただけでは既存プロジェクトのエンジンは変わりません。
+
+Tritonは両環境へ自動導入します。Windowsでは `triton-windows` を使い、PyTorch 2.6→Triton 3.2、2.8→3.4、Kohakuの2.13→3.7に対応させています。`import triton` の確認に加え、GPU上で小さなカーネルをコンパイル・実行して正解と比較します。失敗した導入は成功として登録しません。
+
+手動で登録したsd-scripts環境ではTritonがなくても従来の学習を続けられます。KohakuではTritonの実行テスト成功を必須にしています。Tritonの導入だけでINT8 backwardやtorch.compileを自動的にONにはしません。学習精度や速度は別途比較してください。
+
+上流のAPI・依存バージョン変動を避けるため、Kohakuソースは `0c4737e3b8787a7df0f2d28a2972640a5f8522f6` に固定しています。
+
+
+### 学習と保存
+
+学習画像は指定フォルダ直下だけを列挙し、GUIと同じキャプション拡張子・複数行・class tokensの規則でJSONLを生成します。repeatも保持します。画像やキャプションの原本は変更しません。
+
+実行順は設定チェック→テキストキャッシュ→Latentキャッシュ→学習です。いずれかが失敗すれば次の処理を実行しません。キャッシュはプロジェクト内の `kohaku-cache` に置き、異なるモデルのキャッシュを混ぜないようにします。
+
+Kohakuは独自のMOSS objective、自然な縦横比に沿う解像度計画、LoRAターゲットのプリセットを使用します。sd-scriptsと同一の学習挙動・品質になるとは限りません。bucket刻み・最大最小解像度はKohakuの解像度計画へそのまま対応しません。
+
+実行フォルダ:
+
+- `kohaku_train.py` / `kohaku_data.py`: 自動生成した設定。
+- `dataset.jsonl`: この実行で学習する画像とキャプション。
+- `training.log`: GUIの実行ログ。
+- `kohaku/metrics.jsonl`: 上流の計測ログ。
+- `kohaku/checkpoints/step_XXXXXXXX`: Kohaku専用の再開checkpoint。
+- `kohaku/export`: 正常終了時のComfyUI形式とLyCORIS形式のLoRA。
+- `models`: GUIで指定した出力名を付けた最終LoRAと、保存時点のLoRAのコピー。古いstate整理の前にコピーするため、stateを最新1つにしても既存のLoRA出力は保持します。
+
+再開ダイアログは両エンジンのcheckpointを検出します。sd-scriptsとKohakuのstateを相互に読み込むことはできません。
+
+
+### 今回の接続で対応していない設定
+
+Kohaku選択時は、Epoch指定、初期LoRA重みからの追加学習、Adafactor、モジュール別Rank/LR、Text embedder学習、Caption shuffle・色拡張・ランダムクロップ、Epoch単位の保存/生成、開始前サンプル生成、サンプル行内オプションを実行前に拒否します。周期LoRA保存はKohakuのcheckpoint exportを使うため、state保存も必要です。
+
+constant以外のSchedulerでは、再開時に総STEPを変更する機能にも未対応です。元の総STEPを維持してください。
+
+これらはKohaku本体の制限ではなく、このGUI接続の対応範囲です。
+
+
+### 既存版からの更新
+
+アプリを終了して新しいZIPを別フォルダへ展開し、必要に応じて旧版の `data` と `backend` を移してください。同じ場所へ上書きする場合、古い `start.bat` と `install.bat` はZIP展開だけでは削除されないため、手動で削除できます。新しい起動ファイルは `Start MOSS Studio.bat` の1つです。
+
+ソース、LICENSE、THIRD_PARTY_NOTICES、`setup_backend.py` は必要です。`setup_backend.py` はGUIの導入処理に使います。
+
+
+### ライセンス
+
+KohakuMossTrainerは **KohakuMoss License 1.0** です。Apache-2.0に第10条の名称条件が追加された独自ライセンスであり、通常のApache-2.0として扱わないでください。
+
+利用・改変・再配布が認められていますが、組み込んで配布する製品・パッケージ・主要ブランドのいずれかに **Kohaku** が必要です。この対応版の主要表示名を **MOSS Studio with Kohaku** にしています。非公開の内部ツールや、学習で生成したモデル・LoRA・画像などには第10条の適用除外があります。モデル本体の利用条件は別です。
+
+配布時にはライセンス本文・著作権表示と、該当するNOTICEを保持します。Kohakuを改変して再配布する場合は変更の明記も必要です。このGUIは上流ソースを改変せず、専用venv内に取得したソースから実行します。取得したソースにはLICENSEとエンコーダーのNOTICEを残し、GUI側にも `licenses/KohakuMoss-LICENSE.txt` を収録しています。GUI独自部分のMITライセンスがKohakuへ適用されることはありません。
+
+確認元: https://github.com/KohakuBlueleaf/KohakuMossTrainer/blob/0c4737e3b8787a7df0f2d28a2972640a5f8522f6/LICENSE
+
+

@@ -1,0 +1,274 @@
+import ast
+import copy
+import json
+import os
+from pathlib import Path
+import runpy
+import subprocess
+import sys
+import tempfile
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+from zipfile import ZipFile
+
+from moss_trainer.backends import backend, selected_environment
+from moss_trainer.core import ProjectStore, defaults, discover_states, probe_errors, state_info, training_config, validate, write_run
+from moss_trainer.kohaku_backend import knobs, manifest
+from moss_trainer.kohaku_train_entry import archive_exports
+from moss_trainer import kohaku_bridge
+from moss_trainer.installer import install_triton, register_environment, install
+
+
+class KohakuTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(dir=os.environ.get('MOSS_TEST_TMP'))
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.store = ProjectStore(self.root / 'projects')
+        self.p = self.store.create('Kohaku')
+        self.p['settings']['memory']['backend'] = 'kohaku'
+        images = self.root / '画像 with spaces'
+        images.mkdir()
+        (images / 'cat.png').write_bytes(b'fixture')
+        (images / 'cat.txt').write_text('a cat\nsecond line', encoding='utf-8')
+        self.p['subsets'] = [{'image_dir': str(images), 'num_repeats': 2, 'class_tokens': 'fallback'}]
+        self.env = {'python': 'old/python', 'sd_scripts': 'old/scripts',
+                    'kohaku_python': sys.executable, 'kohaku_source': str(self.root / 'Kohaku source')}
+
+    def test_old_projects_and_environment_keep_sd_scripts(self):
+        old = copy.deepcopy(self.p)
+        del old['settings']['memory']['backend']
+        self.assertEqual(backend(old['settings']), 'sd-scripts')
+        self.assertEqual(selected_environment(self.env, old['settings'])['python'], 'old/python')
+        self.assertFalse({'backend', 'kohaku_max_tokens'} & training_config(old, self.root).keys())
+        only_kohaku = {'kohaku_python': sys.executable, 'kohaku_source': str(self.root)}
+        self.assertEqual(selected_environment(only_kohaku, old['settings'])['python'], '')
+
+    def test_write_configs_routes_python_and_preserves_caption_repeats(self):
+        self.assertEqual(validate(self.p), [])
+        run = self.store.directory(self.p) / 'runs' / 'one'
+        argv = write_run(self.p, self.env, run)
+        self.assertEqual(argv[0], sys.executable)
+        self.assertIn('kohaku_bridge.py', argv[2])
+        self.assertEqual(argv[4], self.env['kohaku_source'])
+        generated = runpy.run_path(str(run / 'kohaku_train.py'))
+        module = ast.parse((run / 'kohaku_train.py').read_text(encoding='utf-8'))
+        self.assertIn('scripts/train/moss.py', ast.get_docstring(module))
+        self.assertEqual(generated['STEPS'], 1500)
+        self.assertEqual(generated['BATCH_SIZE'], 1)
+        self.assertEqual(generated['MEMORY_PROFILE'], 'ckpt-resident')
+        self.assertEqual(generated['MEMORY_OVERRIDES'], {'optim_state': 'gpu', 'fused_step': False})
+        self.assertEqual(generated['FP8_DGRAD'], '16bit')
+        self.assertEqual(generated['TUNE'], 'off')
+        self.assertEqual(generated['RETUNE_STEPS'], 0)
+        rows = [json.loads(line) for line in (run / 'dataset.jsonl').read_text(encoding='utf-8').splitlines()]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]['caption'], 'a cat\nsecond line')
+        self.assertTrue(Path(rows[0]['image']).is_absolute())
+        self.assertFalse((run / 'train.toml').exists())
+        self.assertIn('kohaku_python', json.loads((run / 'environment_snapshot.json').read_text()))
+
+    def test_caption_extension_single_line_and_fallback(self):
+        d = self.p['settings']['dataset']
+        d.update(caption_extension='.caption', enable_multiline_caption=False)
+        folder = Path(self.p['subsets'][0]['image_dir'])
+        (folder / 'cat.caption').write_text('custom\nsecond', encoding='utf-8')
+        self.assertEqual(json.loads(manifest(self.p).splitlines()[0])['caption'], 'custom')
+        (folder / 'cat.caption').unlink()
+        self.assertEqual(json.loads(manifest(self.p).splitlines()[0])['caption'], 'fallback')
+
+    def test_unsupported_options_are_stopped_before_run_directory_is_created(self):
+        for group, key, value in [('training', 'max_train_steps', 0), ('training', 'network_weights', 'other.safetensors'),
+                                  ('training', 'optimizer_type', 'Adafactor'), ('training', 'save_state', False),
+                                  ('memory', 'cache_latents', False), ('dataset', 'random_crop', True)]:
+            project = copy.deepcopy(self.p)
+            project['settings'][group][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                write_run(project, self.env, self.root / key)
+            self.assertFalse((self.root / key).exists())
+
+    def test_scheduler_and_fp8_configuration(self):
+        self.p['settings']['training'].update(lr_scheduler='linear', lr_warmup_steps=10)
+        self.p['settings']['memory']['kohaku_base_precision'] = 'fp8_compute'
+        values = knobs(self.p, self.root)
+        self.assertEqual(values['SCHEDULE']['mode'], 'polynomial')
+        self.assertEqual(values['SCHEDULE']['power'], 1)
+        self.assertEqual(values['BASE_PRECISION'], 'fp8_compute')
+        info = {k: True for k in ('torch','accelerate','safetensors','transformers','bitsandbytes','tensorboard','kohakumoss','kohakuengine','triton','cuda','bf16','triton_runtime')}
+        info['compute_capability'] = [8, 9]
+        self.assertEqual(probe_errors(info, self.p['settings']), [])
+        info['compute_capability'] = [8, 6]
+        self.assertTrue(probe_errors(info, self.p['settings']))
+        info.update(compute_capability=[8, 9], triton_runtime=False)
+        self.assertTrue(probe_errors(info, self.p['settings']))
+
+    def test_adamw_preserves_host_state_profile(self):
+        self.p['settings']['training']['optimizer_type'] = 'AdamW'
+        values = knobs(self.p, self.root)
+        self.assertEqual(values['OPTIMIZER'], 'adamw')
+        self.assertEqual(values['MEMORY_OVERRIDES'], {})
+
+    def test_resident_profile_can_be_selected_without_changing_precision(self):
+        self.p['settings']['memory']['kohaku_memory_profile'] = 'ckpt-resident'
+        self.assertEqual(validate(self.p), [])
+        values = knobs(self.p, self.root)
+        self.assertEqual(values['MEMORY_PROFILE'], 'ckpt-resident')
+        self.assertEqual(values['BASE_PRECISION'], 'auto')
+
+    def test_new_projects_default_to_kohaku_and_legacy_projects_keep_sd_scripts(self):
+        self.assertEqual(defaults()['memory']['backend'], 'kohaku')
+        legacy = copy.deepcopy(self.p)
+        del legacy['settings']['memory']['backend']
+        self.store.save(legacy)
+        loaded = self.store.load(self.store.directory(legacy) / 'project.json')
+        self.assertEqual(loaded['settings']['memory']['backend'], 'sd-scripts')
+
+    def test_native_checkpoint_discovery_and_cross_engine_rejection(self):
+        run = self.store.directory(self.p) / 'runs' / 'one'
+        folder = run / 'kohaku/checkpoints/step_00000025'
+        folder.mkdir(parents=True)
+        (run / 'project_snapshot.json').write_text(json.dumps(self.p), encoding='utf-8')
+        (folder / 'state.json').write_text(json.dumps({'step': 25}))
+        for name in ('trainable.safetensors', 'optim.pt', 'rng.0.pt'):
+            (folder / name).write_bytes(b'fixture')
+        info = state_info(folder)
+        self.assertEqual(info['errors'], [])
+        self.assertEqual(info['step'], 25)
+        self.assertEqual(info['backend'], 'kohaku')
+        self.assertFalse(info.get('can_change_memory_profile', False))
+        config = run / 'kohaku/config.json'
+        config.write_text(json.dumps({'OPTIMIZER': 'adamw8bit', 'MEMORY_OVERRIDES': {'optim_state': 'gpu', 'fused_step': False}}))
+        self.assertTrue(state_info(folder)['can_change_memory_profile'])
+        config.write_text(json.dumps({'OPTIMIZER': 'adamw8bit', 'MEMORY_OVERRIDES': {'optim_state': 'host', 'fused_step': False}}))
+        self.assertFalse(state_info(folder)['can_change_memory_profile'])
+        self.assertEqual(len(discover_states(self.store.directory(self.p))), 1)
+        self.p['settings']['training']['resume'] = str(folder)
+        self.assertEqual(validate(self.p), [])
+        self.p['settings']['training'].update(lr_scheduler='cosine', max_train_steps=2000)
+        self.assertTrue(validate(self.p))
+        self.p['settings']['training'].update(lr_scheduler='constant', max_train_steps=1500)
+        self.p['settings']['memory']['backend'] = 'sd-scripts'
+        from moss_trainer.core import resume_differences
+        self.assertTrue(resume_differences(self.p, info))
+        (folder / 'optim.pt').unlink()
+        self.assertTrue(state_info(folder)['errors'])
+
+    def test_resume_profile_switch_requires_compatible_recorded_optimizer(self):
+        from moss_trainer.core import resume_differences
+        self.p['settings']['memory']['kohaku_memory_profile'] = 'ckpt-ring4-actoff-optstream-gradoff'
+        original = copy.deepcopy(self.p)
+        self.p['settings']['memory']['kohaku_memory_profile'] = 'ckpt-resident'
+        info = {'backend': 'kohaku', 'snapshot': original}
+        self.assertTrue(resume_differences(self.p, info))
+        info['can_change_memory_profile'] = True
+        self.assertEqual(resume_differences(self.p, info), [])
+        self.p['settings']['training']['optimizer_type'] = 'AdamW'
+        self.assertTrue(resume_differences(self.p, info))
+
+    def test_export_archive_keeps_loras_independent_of_checkpoint_retention(self):
+        export = self.root / 'kohaku/checkpoints/step_00000025/export'
+        export.mkdir(parents=True)
+        (export.parent / 'state.json').write_text('{"step":25}')
+        (export / 'kohaku-comfy.safetensors').write_bytes(b'LoRA')
+        archive_exports(self.root, 'my_lora')
+        result = self.root / 'models/my_lora-step_00000025-kohaku-comfy.safetensors'
+        self.assertEqual(result.read_bytes(), b'LoRA')
+        archive_exports(self.root, 'my_lora')
+        self.assertEqual(result.read_bytes(), b'LoRA')
+
+    def test_pipeline_failure_stops_before_next_stage(self):
+        run = self.store.directory(self.p) / 'runs' / 'one'
+        write_run(self.p, self.env, run)
+        with patch.object(sys, 'argv', ['bridge', str(run), self.env['kohaku_source'], '2']), \
+             patch.object(kohaku_bridge.subprocess, 'run', side_effect=[None, subprocess.CalledProcessError(1, ['cache'])]) as child:
+            with self.assertRaises(subprocess.CalledProcessError):
+                kohaku_bridge.main()
+        self.assertEqual(child.call_count, 2)  # validate + text cache; no latents/training
+        self.assertTrue(all(call.kwargs['check'] for call in child.call_args_list))
+
+    def test_triton_package_is_paired_with_torch_and_executes_a_kernel_test(self):
+        from moss_trainer import installer
+        for torch_version, expected in [('2.8.0', '3.4'), ('2.6.0', '3.2'), ('2.13.0', '3.7')]:
+            with patch.object(installer, 'run') as run:
+                install_triton(sys.executable, torch_version, self.root)
+            self.assertIn(f'>={expected}', ' '.join(map(str, run.call_args_list[0].args[0])))
+            self.assertIn('triton_check.py', str(run.call_args_list[1].args[0][1]))
+        with patch.object(installer, 'run', side_effect=subprocess.CalledProcessError(1, ['pip'])) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                install_triton(sys.executable, '2.8.0', self.root)
+            self.assertEqual(run.call_count, 1)
+
+    def test_registering_kohaku_preserves_sd_scripts(self):
+        (self.root / 'environment.json').write_text(json.dumps(self.env))
+        result = register_environment(self.root, {'kohaku_python': 'new/python'})
+        self.assertEqual(result['python'], 'old/python')
+        self.assertEqual(result['sd_scripts'], 'old/scripts')
+        self.assertEqual(result['kohaku_python'], 'new/python')
+        with self.assertRaises(ValueError):
+            install(self.root, self.root, backend='kohaku', profile='cu128')
+
+    def test_kohaku_progress_is_distinct_from_cache_progress(self):
+        from moss_trainer.progress import TrainingProgress
+        progress = TrainingProgress()
+        self.assertFalse(progress.feed('caption: 20%|##| 2/10 [00:04<00:16, 2.00it/s]'))
+        self.assertTrue(progress.feed('train: 20%|##| 2/10 [00:12<00:48, 6.00s/it, loss=0.1]', now=100))
+        self.assertEqual(progress.current, 2)
+        self.assertEqual(progress.total, 10)
+        self.assertEqual(progress.remaining(now=100), 48)
+
+    def test_kohaku_installation_is_separate_and_jit_failure_is_not_registered(self):
+        from moss_trainer import installer
+        data = self.root / 'data'
+        data.mkdir()
+        (data / 'environment.json').write_text(json.dumps(self.env))
+        def download(url, target):
+            with ZipFile(target, 'w') as archive:
+                for path in ('scripts/train/moss.py', 'pyproject.toml', 'LICENSE'):
+                    archive.writestr('kohaku-fixture/' + path, '# fixture')
+        with patch.object(installer, 'resolve_base_python', return_value=sys.executable), \
+             patch.object(installer, 'download', side_effect=download), \
+             patch.object(installer, 'run'), \
+             patch.object(installer, 'probe', return_value={'triton_runtime': True}), \
+             patch.object(installer, 'probe_errors', return_value=[]), \
+             patch.object(installer.subprocess, 'run'):
+            result = install(self.root / 'backend', data, profile='cu130', backend='kohaku')
+        self.assertEqual(result['python'], self.env['python'])
+        self.assertIn('kohaku-env', result['kohaku_python'])
+        self.assertTrue((Path(result['kohaku_source']) / 'LICENSE').is_file())
+        before = (data / 'environment.json').read_text()
+        with patch.object(installer, 'resolve_base_python', return_value=sys.executable), \
+             patch.object(installer, 'run'), \
+             patch.object(installer, 'install_triton', side_effect=RuntimeError('GPU JIT failed')):
+            with self.assertRaisesRegex(RuntimeError, 'GPU JIT'):
+                install(self.root / 'backend', data, profile='cu130', backend='kohaku')
+        self.assertEqual((data / 'environment.json').read_text(), before)
+        self.assertEqual(json.loads((self.root / 'backend/kohaku-env/installation.json').read_text())['status'], 'failed')
+
+    def test_training_entry_overlays_settings_and_archives_before_pruning(self):
+        from moss_trainer import kohaku_train_entry as entry
+        (self.root / 'project_snapshot.json').write_text(json.dumps(self.p), encoding='utf-8')
+        export = self.root / 'kohaku/checkpoints/step_00000025/export'
+        export.mkdir(parents=True)
+        (export.parent / 'state.json').write_text('{"step":25}')
+        (export / 'kohaku-comfy.safetensors').write_bytes(b'LoRA')
+        class Manager:
+            def prune(manager):
+                archived = self.root / 'models/moss_lora-step_00000025-kohaku-comfy.safetensors'
+                self.assertTrue(archived.is_file())
+        original = Manager.prune
+        seen = []
+        def run(knobs):
+            seen.append(knobs['STEPS'])
+            Manager().prune()
+        fake = SimpleNamespace(CheckpointManager=Manager)
+        with patch.dict(sys.modules, {'kohakumoss.training.checkpoint.manager': fake}), \
+             patch.object(sys, 'argv', ['entry', str(self.root / 'source'), str(self.root)]), \
+             patch.object(entry.runpy, 'run_path', side_effect=[{'run': run, 'STEPS': 1000}, {'STEPS': 1500}]):
+            entry.main()
+        self.assertEqual(seen, [1500])
+        self.assertIs(Manager.prune, original)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -19,6 +19,29 @@ TORCH_PROFILES = {
     'cu124': ('2.6.0', '0.21.0'),
 }
 
+# Match the upstream triton-windows PyTorch compatibility table, not latest.
+TRITON_VERSIONS = {'2.6': '3.2', '2.8': '3.4', '2.13': '3.7'}
+KOHAKU_COMMIT = '0c4737e3b8787a7df0f2d28a2972640a5f8522f6'
+
+
+def install_triton(python, torch_version, cwd):
+    minor = '.'.join(torch_version.split('.')[:2])
+    version = TRITON_VERSIONS[minor]
+    major, patch = map(int, version.split('.'))
+    package = 'triton-windows' if os.name == 'nt' else 'triton'
+    run([python, '-m', 'pip', 'install', '--only-binary=:all:',
+         f'{package}>={version},<{major}.{patch + 1}'], cwd=cwd)
+    # Import success alone does not prove the JIT/compiler/GPU works.
+    run([python, str(Path(__file__).with_name('triton_check.py'))], cwd=cwd)
+
+
+def register_environment(data_dir, additions):
+    path = Path(data_dir) / 'environment.json'
+    previous = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
+    env = {**previous, **additions}
+    atomic_json(path, env)
+    return env
+
 
 def run(argv, cwd=None):
     print('\n> ' + subprocess.list2cmdline([str(x) for x in argv]), flush=True)
@@ -58,7 +81,7 @@ def download(url, target):
     os.replace(temporary, target)
 
 
-def extract_source(archive, destination):
+def extract_source(archive, destination, required=('moss_image_train_network.py', 'requirements.txt')):
     destination = Path(destination).resolve()
     with ZipFile(archive) as bundle:
         # GitHub source archives have exactly one enclosing directory.
@@ -80,7 +103,7 @@ def extract_source(archive, destination):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with bundle.open(item) as source, target.open('wb') as output:
                     shutil.copyfileobj(source, output)
-    if not (destination / 'moss_image_train_network.py').is_file() or not (destination / 'requirements.txt').is_file():
+    if not all((destination / name).is_file() for name in required):
         raise ValueError('取得した sd-scripts が MOSS-Image に対応していません')
 
 
@@ -112,8 +135,12 @@ def installation_lock(folder):
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def install(root, data_dir, base_python=None, profile='cu128'):
-    folder = Path(root).resolve() / 'moss-env'
+def install(root, data_dir, base_python=None, profile='cu128', backend='sd-scripts'):
+    if backend not in ('sd-scripts', 'kohaku'):
+        raise ValueError('Unknown backend: ' + backend)
+    if backend == 'kohaku' and profile != 'cu130':
+        raise ValueError('Kohaku requires the cu130 profile. Select cu130 in setup.')
+    folder = Path(root).resolve() / ('kohaku-env' if backend == 'kohaku' else 'moss-env')
     marker = folder / '.moss-studio.json'
     ownership = {'kind': 'MOSSStudioDedicatedBackend', 'schema_version': 1}
     if folder.exists():
@@ -123,6 +150,8 @@ def install(root, data_dir, base_python=None, profile='cu128'):
         folder.mkdir(parents=True, exist_ok=False)
         atomic_json(marker, ownership)
     with installation_lock(folder):
+        if backend == 'kohaku':
+            return _install_kohaku(folder, data_dir, base_python)
         return _install(folder, data_dir, base_python, profile)
 
 
@@ -173,12 +202,16 @@ def _install(folder, data_dir, base_python=None, profile='cu128'):
         print('[4/6] sd-scripts と学習用パッケージを導入', flush=True)
         run([python, '-m', 'pip', 'install', '-c', constraints, '-r', 'requirements.txt'], cwd=source)
         run([python, '-m', 'pip', 'install', '-c', constraints, 'tensorboard', 'bitsandbytes'], cwd=source)
+        print('Triton を導入して GPU カーネルのコンパイル・実行を確認', flush=True)
+        install_triton(python, torch_version, source)
         run([python, '-m', 'pip', 'check'], cwd=source)
 
         print('[5/6] CUDA / bf16 と MOSS スクリプトを検証', flush=True)
         env = {'python': str(python), 'sd_scripts': str(source)}
         info = probe(env)
-        errors = probe_errors(info, defaults())
+        settings = defaults()
+        settings['memory']['backend'] = 'sd-scripts'
+        errors = probe_errors(info, settings)
         if errors:
             raise ValueError('\n'.join(errors) + '\nNVIDIA ドライバや CUDA プロファイルを確認してください。')
         run([python, 'moss_image_train_network.py', '--help'], cwd=source)
@@ -190,10 +223,63 @@ def _install(folder, data_dir, base_python=None, profile='cu128'):
         atomic_json(folder / 'installation.json', record)
         atomic_json(data_dir / 'setup_options.json', {'root': str(folder.parent), 'profile': profile, 'base_python': base_python or ''})
         # This is the commit point. Failures before here preserve the previous GUI configuration.
-        atomic_json(data_dir / 'environment.json', env)
+        env = register_environment(data_dir, env)
         print('導入完了。モデルと画像フォルダを選択すると学習を開始できます。', flush=True)
-        print('Triton は自動導入しません。INT8 は bf16 fallback で動作し、速度が低下する場合があります。', flush=True)
+        print('Triton の GPU 実行テストに成功しました。', flush=True)
         return env
+    except BaseException as exc:
+        record.update(status='failed', error=str(exc))
+        atomic_json(folder / 'installation.json', record)
+        raise
+
+
+def _install_kohaku(folder, data_dir, base_python=None):
+    base = resolve_base_python(base_python)
+    folder, data_dir = Path(folder).resolve(), Path(data_dir).resolve()
+    record = {'status': 'installing', 'backend': 'kohaku', 'commit': KOHAKU_COMMIT,
+              'directory': str(folder), 'base_python': base}
+    try:
+        source = folder / 'KohakuMossTrainer'
+        complete = source / '.moss-source-complete.json'
+        if not complete.is_file() or not all((source / p).is_file() for p in ('scripts/train/moss.py', 'pyproject.toml', 'LICENSE')):
+            archive = folder / 'kohaku-source.zip'
+            download(f'https://codeload.github.com/KohakuBlueleaf/KohakuMossTrainer/zip/{KOHAKU_COMMIT}', archive)
+            extract_source(archive, source, required=('scripts/train/moss.py', 'pyproject.toml', 'LICENSE'))
+            atomic_json(complete, {'commit': KOHAKU_COMMIT})
+        elif json.loads(complete.read_text(encoding='utf-8')).get('commit') != KOHAKU_COMMIT:
+            raise ValueError('Kohaku source version differs. Choose a new setup directory.')
+        # The source retains LICENSE, author notices and packaged encoder NOTICE.
+        python = folder / 'venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        if not python.is_file():
+            run([base, '-m', 'venv', str(folder / 'venv')])
+        run([python, '-m', 'ensurepip', '--upgrade'])
+        run([python, '-m', 'pip', 'install', '--upgrade', 'pip', 'setuptools', 'wheel'])
+        constraints = folder / 'torch-constraints.txt'
+        constraints.write_text('torch==2.13.0\n', encoding='utf-8')
+        run([python, '-m', 'pip', 'install', '-c', constraints, 'torch==2.13.0', 'torchvision',
+             '--index-url', 'https://download.pytorch.org/whl/cu130'])
+        run([python, '-m', 'pip', 'install', '-c', constraints, '-e', str(source) + '[cuda]', 'tensorboard'])
+        install_triton(python, '2.13.0', source)
+        run([python, '-m', 'pip', 'check'], cwd=source)
+        doctor = python.with_name('kohakumoss-doctor.exe' if os.name == 'nt' else 'kohakumoss-doctor')
+        run([doctor], cwd=source)
+        env = {'backend': 'kohaku', 'python': str(python), 'source': str(source),
+               'kohaku_python': str(python), 'kohaku_source': str(source)}
+        settings = defaults()
+        settings['memory']['backend'] = 'kohaku'
+        info = probe(env)
+        errors = probe_errors(info, settings)
+        if errors:
+            raise ValueError('\n'.join(errors))
+        with (folder / 'packages.txt').open('w', encoding='utf-8') as packages:
+            subprocess.run([str(python), '-m', 'pip', 'freeze', '--all'], cwd=source, stdout=packages, check=True)
+        record.update(status='completed', probe=info)
+        atomic_json(folder / 'installation.json', record)
+        atomic_json(data_dir / 'setup_options.json', {'root': str(folder.parent), 'profile': 'cu130',
+                    'backend': 'kohaku', 'base_python': base_python or ''})
+        registered = register_environment(data_dir, {'kohaku_python': str(python), 'kohaku_source': str(source)})
+        print('Kohaku導入完了。「04 VRAM・速度」で学習エンジンをkohakuに切り替えてください。', flush=True)
+        return registered
     except BaseException as exc:
         record.update(status='failed', error=str(exc))
         atomic_json(folder / 'installation.json', record)
@@ -208,10 +294,11 @@ def main():
     parser.add_argument('--root', required=True)
     parser.add_argument('--data-dir', required=True)
     parser.add_argument('--base-python')
-    parser.add_argument('--profile', choices=TORCH_PROFILES, default='cu128')
+    parser.add_argument('--profile', choices=[*TORCH_PROFILES, 'cu130'], default='cu128')
+    parser.add_argument('--backend', choices=['sd-scripts', 'kohaku'], default='sd-scripts')
     args = parser.parse_args()
     try:
-        install(args.root, args.data_dir, args.base_python, args.profile)
+        install(args.root, args.data_dir, args.base_python, args.profile, args.backend)
     except Exception as exc:
         print('\n導入に失敗しました: ' + str(exc), file=sys.stderr, flush=True)
         raise SystemExit(1)

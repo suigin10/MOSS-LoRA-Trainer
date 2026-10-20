@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .i18n import tr
+from .backends import backend, selected_environment, environment_valid, source_dir
 
 import copy
 import json
@@ -65,6 +66,10 @@ FIELDS = {
         'resume': ('再開 state フォルダ（任意）', '', 'dir', 'コピー作成時はリセット。通常の新規学習では空欄'),
     },
     'memory': {
+        'backend': ('学習エンジン', 'kohaku', ['sd-scripts', 'kohaku'], 'Kohaku用環境は「かんたん導入」で別途作成。再開stateはエンジン間で共有できません'),
+        'kohaku_memory_profile': ('Kohaku: メモリ構成', 'ckpt-resident', ['ckpt-ring4-actoff-optstream-gradoff', 'low', 'balanced', 'ckpt-resident', 'minimal', 'auto'], '12GBのINT8モデル向け初期値はckpt-resident。VRAM不足時はckpt-ring4-actoff-optstream-gradoffへ。下のswap・offload・Attentionはsd-scripts用'),
+        'kohaku_base_precision': ('Kohaku: ベース計算', 'auto', ['auto', 'int8', 'fp8_compute'], 'autoはモデルの保存精度。FP8は対応GPUで実測比較してください'),
+        'kohaku_max_tokens': ('Kohaku: トークン上限', 6144, None, '画像＋テキストの上限。12GB向け開始値6144。KohakuはMOSS objectiveと独自の解像度計画を使用'),
         'convrot_int8': ('DiT: ConvRot INT8', True, None, 'VRAM 12GB 向けの開始設定。量子化済みチェックポイントも自動検出されます'),
         'convrot_int8_text_encoder': ('Qwen: ConvRot INT8', True, None, 'VRAM 12GB 向けの開始設定。キャッシュ時の VRAM を削減'),
         'convrot_int8_bwd': ('INT8 backward', 'bf16', ['bf16', 'int8'], 'bf16 が高精度。int8 は Triton / CUDA が必要'),
@@ -116,7 +121,7 @@ FIELDS = {
         'prompts': ('プロンプト（1行1件）', 'A photo of a cat sitting by a window, soft natural light, detailed fur.', 'multiline', '学習対象に置き換えてください。改行は \\n と記述。行内の --w / --h / --s / --l / --fs / --d / --n は共通値より優先'),
     },
 }
-ENV_DEFAULTS = {'python': '', 'sd_scripts': ''}
+ENV_DEFAULTS = {'python': '', 'sd_scripts': '', 'kohaku_python': '', 'kohaku_source': ''}
 
 
 def defaults():
@@ -131,6 +136,7 @@ def apply_preset(settings, preset):
              gradient_checkpointing=True, cache_latents=True, cache_latents_to_disk=True,
              cache_text_encoder_outputs=True, cache_text_encoder_outputs_to_disk=True)
     settings['dataset']['batch_size'] = 1
+    m['kohaku_memory_profile'] = 'ckpt-resident'
 
 
 def atomic_json(path, data):
@@ -204,6 +210,8 @@ class ProjectStore:
                 raise ValueError(tr('画像サブセットの型が不正です'))
         # Missing known fields get defaults; unknown fields are rejected, never silently launched.
         merged = defaults()
+        # A project saved before backend selection existed always used sd-scripts.
+        merged['memory']['backend'] = p['settings'].get('memory', {}).get('backend', 'sd-scripts')
         for group, values in p['settings'].items():
             if group not in merged or not isinstance(values, dict):
                 raise ValueError(tr('不明な設定: {p0}', p0=group))
@@ -309,10 +317,13 @@ def validate(project, env=None, files=False):
             require(path.is_absolute() and path.is_dir(), tr('画像フォルダが存在しません（絶対パス）: {p0}', p0=path))
             if path.is_dir():
                 require(any(p.suffix.lower() in IMAGE_EXTENSIONS for p in path.iterdir() if p.is_file()), tr('画像がありません: {p0}（サブフォルダは自動再帰しません）', p0=path))
+    if backend(s) == 'kohaku':
+        from .kohaku_backend import problems
+        errors.extend(problems(project))
     if files:
-        env = env or ENV_DEFAULTS
+        env = selected_environment(env or ENV_DEFAULTS, s)
         require(Path(env['python']).is_file() and Path(env['python']).is_absolute(), tr('学習用 Python の実行ファイルを絶対パスで指定してください'))
-        require(Path(env['sd_scripts']).is_absolute() and (Path(env['sd_scripts']) / 'moss_image_train_network.py').is_file(), tr('MOSS 対応の sd-scripts フォルダを指定してください'))
+        require(environment_valid(env), tr('選択した学習エンジンのPythonとソースを「かんたん導入」または「実行環境」で指定してください。'))
         for key in ('pretrained_model_name_or_path', 'text_encoder', 'vae'):
             path = Path(s['model'][key])
             require(bool(s['model'][key]) and path.is_absolute() and path.is_file(), tr('{p0}: モデルファイルを絶対パスで指定してください', p0=tr(FIELDS['model'][key][0])))
@@ -345,7 +356,10 @@ def validate(project, env=None, files=False):
 
 def state_info(folder):
     folder = Path(folder).resolve()
-    info = {'path': str(folder), 'step': 0, 'epoch': 0, 'errors': [], 'snapshot': None, 'final': False}
+    if (folder / 'state.json').is_file():
+        from .kohaku_backend import state_info as kohaku_state_info
+        return kohaku_state_info(folder)
+    info = {'backend': 'sd-scripts', 'path': str(folder), 'step': 0, 'epoch': 0, 'errors': [], 'snapshot': None, 'final': False}
     try:
         metadata = json.loads((folder / 'train_state.json').read_text(encoding='utf-8'))
         if type(metadata['current_step']) is not int or metadata['current_step'] < 0 or type(metadata['current_epoch']) is not int or metadata['current_epoch'] < 0:
@@ -381,17 +395,26 @@ def state_info(folder):
 
 def resume_differences(project, info):
     source = info.get('snapshot')
+    if backend(project['settings']) != info.get('backend', 'sd-scripts'):
+        return [tr('再開stateの学習エンジンが一致しません。元のエンジンを選択してください。')]
     if not source:
         return []
     differences = []
     for group, keys in {
         'model': tuple(FIELDS['model']), 'dataset': tuple(FIELDS['dataset']),
         'flow': tuple(FIELDS['flow']),
+        'memory': ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'),
         'training': ('network_dim', 'network_alpha', 'optimizer_type', 'lr_scheduler', 'learning_rate',
                      'lr_warmup_steps', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
     }.items():
         for key in keys:
-            original = source['settings'].get(group, {}).get(key, FIELDS[group][key][1])
+            if (group == 'memory' and key == 'kohaku_memory_profile'
+                    and backend(project['settings']) == 'kohaku'
+                    and project['settings']['training']['optimizer_type'] == 'AdamW8bit'
+                    and info.get('can_change_memory_profile')):
+                # These profiles keep the same unfused bitsandbytes optimizer state.
+                continue
+            original = source['settings'].get(group, {}).get(key, 'sd-scripts' if key == 'backend' else FIELDS[group][key][1])
             if project['settings'][group][key] != original:
                 differences.append(tr('state 再開の設定差: {p0}。元設定を復元するか、LoRA 重みから追加学習してください', p0=tr(FIELDS[group][key][0])))
     if project['subsets'] != source['subsets']:
@@ -412,6 +435,12 @@ def resume_limit_changed(project, info):
 def discover_states(project_dir):
     candidates = []
     for metadata in Path(project_dir).glob('runs/*/models/*/train_state.json'):
+        info = state_info(metadata.parent)
+        info['modified'] = metadata.stat().st_mtime
+        candidates.append(info)
+    for metadata in Path(project_dir).glob('runs/*/kohaku/checkpoints/step_*/state.json'):
+        if metadata.parent.name.endswith('.partial'):
+            continue
         info = state_info(metadata.parent)
         info['modified'] = metadata.stat().st_mtime
         candidates.append(info)
@@ -453,6 +482,8 @@ def training_config(project, run_dir):
               'log_with': 'tensorboard', 'dataset_config': str(run_dir / 'dataset.toml')}
     for group in ('model', 'training', 'memory'):
         config.update({k: v for k, v in s[group].items() if v != ''})
+    for key in ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'):
+        config.pop(key, None)
     config.pop('keep_latest_state_only', None)
     config.pop('num_cpu_threads_per_process', None)  # accelerate launch option, not a trainer argument
     if not s['training']['resume']:
@@ -513,6 +544,10 @@ def sample_prompts_text(settings):
 
 
 def command(env, run_dir, settings=None):
+    env = selected_environment(env, settings or {})
+    if env['backend'] == 'kohaku':
+        from .kohaku_backend import command as kohaku_command
+        return kohaku_command(env, run_dir, settings)
     threads = settings.get('memory', {}).get('num_cpu_threads_per_process', 2) if settings else 2
     if type(threads) is not int or threads < 1:
         raise ValueError(tr('CPU処理スレッド数は1以上の整数にしてください'))
@@ -525,6 +560,14 @@ def command(env, run_dir, settings=None):
 
 
 def write_run(project, env, run_dir):
+    env = selected_environment(env, project['settings'])
+    if env['backend'] == 'kohaku':
+        from .kohaku_backend import write_configs
+        errors = validate(project)
+        if errors:
+            raise ValueError('\n'.join(errors))
+        Path(run_dir).mkdir(parents=True, exist_ok=False)
+        return write_configs(project, env, run_dir)
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=False)
     (run_dir / 'dataset.toml').write_text(dataset_config(project), encoding='utf-8')
@@ -631,40 +674,57 @@ def dataset_report(project):
 
 PROBE_CODE = '''import json, importlib.util
 r={}
-for m in ('torch','accelerate','safetensors','transformers','bitsandbytes','tensorboard','triton','xformers','flash_attn'):
+for m in ('torch','accelerate','safetensors','transformers','bitsandbytes','tensorboard','triton','xformers','flash_attn','kohakumoss','kohakuengine'):
  r[m]=importlib.util.find_spec(m) is not None
 if r['torch']:
  import torch
+ r['torch_version']=torch.__version__
  r['cuda']=torch.cuda.is_available()
  if r['cuda']:
   r['gpu']=torch.cuda.get_device_name(0)
   r['vram_gb']=round(torch.cuda.get_device_properties(0).total_memory/1024**3,1)
   r['bf16']=torch.cuda.is_bf16_supported()
+  r['compute_capability']=list(torch.cuda.get_device_capability(0))
 print(json.dumps(r))
 '''
 
 
 def probe(env):
     flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-    result = subprocess.run([env['python'], '-c', PROBE_CODE], cwd=env['sd_scripts'], capture_output=True,
+    result = subprocess.run([env['python'], '-c', PROBE_CODE], cwd=source_dir(env), capture_output=True,
                             text=True, encoding='utf-8', errors='replace', timeout=90, creationflags=flags)
     if result.returncode:
         raise ValueError(result.stderr[-4000:] or tr('環境チェックに失敗しました'))
-    return json.loads(result.stdout.strip().splitlines()[-1])
+    info = json.loads(result.stdout.strip().splitlines()[-1])
+    if info.get('triton') and info.get('cuda'):
+        check = subprocess.run([env['python'], str(Path(__file__).with_name('triton_check.py'))],
+                               cwd=source_dir(env), capture_output=True, text=True, encoding='utf-8',
+                               errors='replace', timeout=180, creationflags=flags)
+        info['triton_runtime'] = check.returncode == 0
+        if check.returncode:
+            info['triton_error'] = (check.stderr or check.stdout)[-2000:]
+    return info
 
 
 def probe_errors(info, settings):
     required = ['torch', 'accelerate', 'safetensors', 'transformers', 'tensorboard']
+    kohaku = backend(settings) == 'kohaku'
+    if kohaku:
+        required = ['torch', 'safetensors', 'transformers', 'kohakumoss', 'kohakuengine', 'triton']
     if settings['training']['optimizer_type'] == 'AdamW8bit':
         required.append('bitsandbytes')
-    if settings['memory']['attn_mode'] != 'torch':
+    if not kohaku and settings['memory']['attn_mode'] != 'torch':
         required.append({'xformers': 'xformers', 'flash': 'flash_attn'}[settings['memory']['attn_mode']])
     errors = [tr('{p0} が学習用 Python にインストールされていません', p0=m) for m in required if not info.get(m)]
     if not info.get('cuda'):
         errors.append(tr('CUDA GPU を使用できません'))
     elif not info.get('bf16'):
         errors.append(tr('選択した GPU / PyTorch は bf16 に対応していません'))
-    if settings['memory']['convrot_int8_bwd'] == 'int8' and not info.get('triton'):
+    if kohaku and not info.get('triton_runtime'):
+        errors.append(tr('Kohaku: TritonのGPU実行テストに失敗しました。「かんたん導入」で修復してください。'))
+    if kohaku and settings['memory']['kohaku_base_precision'] == 'fp8_compute' and tuple(info.get('compute_capability', (0, 0))) < (8, 9):
+        errors.append(tr('Kohaku: FP8計算にはsm89以降のGPUが必要です。autoまたはint8を選択してください。'))
+    if not kohaku and settings['memory']['convrot_int8_bwd'] == 'int8' and (not info.get('triton') or info.get('triton_runtime') is False):
         errors.append(tr('INT8 backward には Triton が必要です'))
     return errors
 
@@ -746,7 +806,7 @@ class Runner:
         try:
             atomic_json(folder / 'status.json', status)
             kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
-            env = dict(os.environ, PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8')
+            env = dict(os.environ, PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
             with (folder / 'training.log').open('w', encoding='utf-8', buffering=1) as log:
                 child = subprocess.Popen(argv, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                          text=True, encoding='utf-8', errors='replace', bufsize=1, **kwargs)

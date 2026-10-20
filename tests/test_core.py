@@ -22,6 +22,7 @@ class CoreTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.store = ProjectStore(self.root / 'projects')
         self.p = self.store.create('テスト project')
+        self.p['settings']['memory']['backend'] = 'sd-scripts'
         self.images = self.root / '画像 with spaces'
         self.images.mkdir()
         (self.images / '猫.png').write_bytes(b'fixture')
@@ -445,6 +446,15 @@ class CoreTests(unittest.TestCase):
         runner.thread.join(15)
         self.assertFalse(runner.running)
         self.assertEqual(json.loads((folder / 'status.json').read_text())['status'], 'stopped')
+
+    def test_runner_uses_utf8_for_nested_subprocesses(self):
+        folder = self.root / 'utf8-child'
+        folder.mkdir()
+        runner = Runner(lambda k, v: None)
+        runner.start([sys.executable, '-c', 'import sys,subprocess; print(sys.flags.utf8_mode); print(subprocess._text_encoding())'], self.root, folder)
+        runner.thread.join(15)
+        self.assertFalse(runner.running)
+        self.assertEqual((folder / 'training.log').read_text(encoding='utf-8').splitlines(), ['1', 'utf-8'])
 
 
 if __name__ == '__main__':

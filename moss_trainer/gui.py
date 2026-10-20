@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from . import __version__
 from .i18n import tr, set_language
 
 import copy
@@ -16,6 +17,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from uuid import uuid4
 
+from .backends import backend, selected_environment, source_dir, environment_valid
+from .icons import load as load_icons, decorate as decorate_icons
 from .core import (FIELDS, ENV_DEFAULTS, ProjectStore, Runner, apply_preset, atomic_json,
                    command, dataset_config, dataset_report, defaults, dump_toml, probe,
                    probe_errors, sample_prompts_text, state_info, discover_states,
@@ -304,7 +307,8 @@ class ResumeDialog(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self, data_dir=None):
         super().__init__()
-        self.title('MOSS Studio — LoRA Trainer')
+        load_icons(self)
+        self.title(f'MOSS Studio with Kohaku v{__version__}')
         initial_height = min(880, max(480, self.winfo_screenheight() - 100))
         self.geometry(f'1220x{initial_height}')
         self.minsize(1000, min(700, initial_height))
@@ -416,8 +420,7 @@ class App(tk.Tk):
         self.rowconfigure(3, weight=1)
         header = ttk.Frame(self, padding=(24, 16), style='Header.TFrame')
         header.grid(row=0, column=0, sticky='ew')
-        ttk.Label(header, text='MOSS Studio', style='HeaderTitle.TLabel').pack(side='left')
-        ttk.Label(header, text='  /  MOSS-Image LoRA Trainer', style='HeaderSubtitle.TLabel').pack(side='left', padx=12)
+        ttk.Label(header, text=f'MOSS Studio with Kohaku v{__version__}', style='HeaderTitle.TLabel').pack(side='left')
         ttk.Button(header, text=tr('実行環境'), style='Header.TButton', command=self.environment).pack(side='right')
         ttk.Button(header, text=tr('かんたん導入'), style='Header.TButton', command=self.setup_dialog).pack(side='right', padx=8)
         self.language_choice = tk.StringVar(value='日本語' if self.language == 'ja' else 'English')
@@ -476,13 +479,12 @@ class App(tk.Tk):
                 ttk.Label(presets, text=tr('VRAM 容量別プリセット')).pack(side='left', padx=(0, 10))
                 for preset in ('12GB', '16GB', '24GB+'):
                     ttk.Button(presets, text=preset, command=lambda p=preset: self.set_preset(p)).pack(side='left', padx=4)
+                ttk.Button(presets, text=tr('設定ガイド'), command=self.show_settings_guide).pack(side='right', padx=4)
                 row = 1
             for key, spec in FIELDS[group].items():
                 self.field(page.body, group, key, spec, row)
                 row += 1
-            if group == 'memory':
-                ttk.Label(page.body, text=tr('VRAM 12GB: INT8 / swap 16\u3000\u300016GB: INT8 / swap 0\u3000\u300024GB以上: bf16 / swap 0\n機種名ではなく搭載 VRAM 容量で選択してください。すべて batch 1・checkpointing・ディスクキャッシュ ON。\n必要なメモリは画像・キャプションでも変わります。8GB 向けプリセットは用意していません。'), style='Hint.TLabel', wraplength=800).grid(row=row, column=0, columnspan=3, sticky='w', pady=12)
-        for key in ('convrot_int8', 'convrot_int8_text_encoder', 'blocks_to_swap'):
+        for key in ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'convrot_int8', 'convrot_int8_text_encoder', 'blocks_to_swap'):
             self.variables[('memory', key)].trace_add('write', lambda *args: self.update_summary())
         self.variables[('dataset', 'batch_size')].trace_add('write', lambda *args: self.update_summary())
         self.variables[('training', 'max_train_steps')].trace_add('write', lambda *args: self.update_stop_mode())
@@ -506,6 +508,7 @@ class App(tk.Tk):
         self.stop_button.pack(side='right', padx=8)
         ttk.Button(actions, text=tr('設定を書き出す'), command=self.export).pack(side='right', padx=4)
         ttk.Button(actions, text=tr('設定を確認'), command=self.check).pack(side='right', padx=4)
+        decorate_icons(self)
 
     def field(self, parent, group, key, spec, row):
         label, default, choices, hint = spec
@@ -757,10 +760,15 @@ class App(tk.Tk):
         apply_preset(s, name)
         for key in ('convrot_int8', 'convrot_int8_text_encoder', 'blocks_to_swap', 'cpu_offload_checkpointing', 'unsloth_offload_checkpointing', 'gradient_checkpointing', 'cache_latents', 'cache_latents_to_disk', 'cache_text_encoder_outputs', 'cache_text_encoder_outputs_to_disk'):
             self.variables[('memory', key)].set(s['memory'][key])
+        self.variables[('memory', 'kohaku_memory_profile')].set(s['memory']['kohaku_memory_profile'])
         self.variables[('dataset', 'batch_size')].set(1)
         self.status.set(tr('{p0} プリセットを適用しました（未保存）', p0=name))
 
     def update_summary(self):
+        if self.variables[('memory', 'backend')].get() == 'kohaku':
+            self.memory_summary.set('Kohaku / ' + self.variables[('memory', 'kohaku_memory_profile')].get()
+                                    + ' / ' + self.variables[('memory', 'kohaku_base_precision')].get())
+            return
         dit = 'INT8' if self.variables[('memory', 'convrot_int8')].get() else 'bf16'
         te = 'INT8' if self.variables[('memory', 'convrot_int8_text_encoder')].get() else 'bf16'
         blocks = self.variables[('memory', 'blocks_to_swap')].get()
@@ -817,12 +825,12 @@ class App(tk.Tk):
         body = page.body
         body.columnconfigure(1, weight=1)
         ttk.Label(body, text=tr('学習バックエンドを指定'), style='Title.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
-        variables = {key: tk.StringVar(value=value) for key, value in self.env.items()}
-        for row, (key, label, kind) in enumerate((('python', tr('学習用 Python'), 'file'), ('sd_scripts', tr('sd-scripts フォルダ'), 'dir')), 1):
+        variables = {key: tk.StringVar(value=value) for key, value in {**ENV_DEFAULTS, **self.env}.items()}
+        for row, (key, label, kind) in enumerate((('python', tr('学習用 Python'), 'file'), ('sd_scripts', tr('sd-scripts フォルダ'), 'dir'), ('kohaku_python', tr('Kohaku用 Python'), 'file'), ('kohaku_source', tr('Kohakuソース'), 'dir')), 1):
             ttk.Label(body, text=label, width=21).grid(row=row, column=0, sticky='w', pady=8)
             ttk.Entry(body, textvariable=variables[key]).grid(row=row, column=1, sticky='ew', pady=8)
             ttk.Button(body, text=tr('参照…'), command=lambda k=key, c=kind: self.browse(variables[k], c)).grid(row=row, column=2, padx=6)
-        ttk.Label(body, text=tr('Python は venv\\Scripts\\python.exe を選択。sd-scripts は moss_image_train_network.py を含む版が必要です。\nGUI 自体は Python 標準ライブラリだけで動きます。学習環境は README に沿って準備してください。'), style='Hint.TLabel', wraplength=700).grid(row=3, column=0, columnspan=3, sticky='w', pady=16)
+        ttk.Label(body, text=tr('Python は venv\\Scripts\\python.exe を選択。sd-scripts は moss_image_train_network.py を含む版が必要です。\nGUI 自体は Python 標準ライブラリだけで動きます。学習環境は README に沿って準備してください。'), style='Hint.TLabel', wraplength=700).grid(row=5, column=0, columnspan=3, sticky='w', pady=16)
         def commit(check=False):
             try:
                 env = {k: v.get().strip() for k, v in variables.items()}
@@ -859,7 +867,8 @@ class App(tk.Tk):
             options = {}
         root = tk.StringVar(value=options.get('root', str(APP_DIR / 'backend')))
         base = tk.StringVar(value=options.get('base_python', ''))
-        profile = tk.StringVar(value=options.get('profile', 'cu128'))
+        engine = tk.StringVar(value=options.get('backend', 'kohaku'))
+        profile = tk.StringVar(value='cu130' if engine.get() == 'kohaku' else options.get('profile', 'cu128'))
         ttk.Label(body, text=tr('導入先フォルダ'), width=21).grid(row=1, column=0, sticky='w', pady=8)
         ttk.Entry(body, textvariable=root).grid(row=1, column=1, sticky='ew')
         ttk.Button(body, text=tr('参照…'), command=lambda: self.browse(root, 'dir')).grid(row=1, column=2, padx=6)
@@ -867,27 +876,33 @@ class App(tk.Tk):
         ttk.Entry(body, textvariable=base).grid(row=2, column=1, sticky='ew')
         ttk.Button(body, text=tr('参照…'), command=lambda: self.browse(base, 'file')).grid(row=2, column=2, padx=6)
         ttk.Label(body, text='PyTorch / CUDA').grid(row=3, column=0, sticky='w', pady=8)
-        ttk.Combobox(body, textvariable=profile, values=['cu128', 'cu124'], state='readonly').grid(row=3, column=1, sticky='w')
+        ttk.Combobox(body, textvariable=profile, values=['cu128', 'cu124', 'cu130'], state='readonly').grid(row=3, column=1, sticky='w')
         ttk.Label(body, text=tr('初回は専用 venv を新規作成。再実行時は同じ専用環境を確認・修復します。\n作成用 Python は空欄で 3.12 / 3.11 を自動検出。他の用途の venv は流用しません。\ncu128: PyTorch 2.8 / CUDA 12.8（標準）\u3000cu124: PyTorch 2.6 / CUDA 12.4\nインターネット接続と数GB以上の空き容量が必要です。モデル本体は別途選択します。\n再実行時は同じ導入先を指定してください。成功後に GUI の参照先を登録します。'), style='Hint.TLabel', wraplength=730).grid(row=4, column=0, columnspan=3, sticky='w', pady=16)
+        ttk.Label(body, text=tr('学習エンジン')).grid(row=5, column=0, sticky='w', pady=8)
+        selector = ttk.Combobox(body, textvariable=engine, values=['sd-scripts', 'kohaku'], state='readonly')
+        selector.grid(row=5, column=1, sticky='w')
+        selector.bind('<<ComboboxSelected>>', lambda _: profile.set('cu130' if engine.get() == 'kohaku' else 'cu128'))
+        ttk.Label(body, text=tr('Kohakuは別venvに導入。cu130と対応ドライバ、Visual Studio C++ Build Toolsが必要です。Tritonは両エンジンで自動導入しGPU実行を確認します。'),
+                  style='Hint.TLabel', wraplength=730).grid(row=6, column=0, columnspan=3, sticky='w', pady=8)
         def begin():
             if not root.get().strip():
                 messagebox.showerror(tr('導入先'), tr('導入先を指定してください'), parent=dialog)
                 return
             target, python, selected = root.get().strip(), base.get().strip(), profile.get()
             dialog.destroy()
-            self.start_setup(target, python, selected)
+            self.start_setup(target, python, selected, engine.get())
         controls = ttk.Frame(dialog, padding=(24, 12))
         controls.grid(row=1, column=0, sticky='ew')
         ttk.Button(controls, text=tr('導入・確認・修復を開始'), style='Accent.TButton', command=begin).pack(side='right')
 
-    def start_setup(self, root, base='', profile='cu128'):
+    def start_setup(self, root, base='', profile='cu128', backend='sd-scripts'):
         if self.busy:
             return
         try:
             folder = self.data_dir / 'setup-logs' / (datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:6])
             folder.mkdir(parents=True, exist_ok=False)
             argv = [sys.executable, '-u', str(APP_DIR / 'setup_backend.py'), '--root', str(Path(root).resolve()),
-                    '--data-dir', str(self.data_dir), '--profile', profile]
+                    '--data-dir', str(self.data_dir), '--profile', profile, '--backend', backend]
             if base:
                 argv.extend(['--base-python', base])
             self.operation = 'setup'
@@ -1027,6 +1042,10 @@ class App(tk.Tk):
         self.log.see('end')
         self.log.configure(state='disabled')
 
+    def show_settings_guide(self):
+        path = APP_DIR / 'docs' / 'STABLE_SETTINGS.md'
+        self.show_text(tr('設定ガイド'), path.read_text(encoding='utf-8'))
+
     def show_text(self, title, text):
         dialog = tk.Toplevel(self)
         dialog.title(title)
@@ -1060,10 +1079,14 @@ class App(tk.Tk):
             p = self.collect()
             folder = self.store.directory(p) / 'runs' / tr('<実行ID>')
             text = tr('表示用コマンド（実行時には引数配列で起動）\n') + subprocess.list2cmdline(command(self.env, folder, p['settings']))
-            text += '\n\n# train.toml\n' + dump_toml(training_config(p, folder))
-            text += '\n# dataset.toml\n' + dataset_config(p)
-            if p['settings']['samples']['enabled']:
-                text += '\n# sample_prompts.txt\n' + sample_prompts_text(p['settings'])
+            if backend(p['settings']) == 'kohaku':
+                from .kohaku_backend import knobs
+                text += '\n\n# kohaku_train.py\n' + '\n'.join(f'{k} = {v!r}' for k, v in knobs(p, folder).items())
+            else:
+                text += '\n\n# train.toml\n' + dump_toml(training_config(p, folder))
+                text += '\n# dataset.toml\n' + dataset_config(p)
+                if p['settings']['samples']['enabled']:
+                    text += '\n# sample_prompts.txt\n' + sample_prompts_text(p['settings'])
             self.show_text(tr('学習設定のプレビュー'), text)
         except (ValueError, OSError) as exc:
             messagebox.showerror(tr('プレビュー'), str(exc), parent=self)
@@ -1104,13 +1127,14 @@ class App(tk.Tk):
         except ValueError as exc:
             messagebox.showerror(tr('設定の確認'), str(exc), parent=self)
             return
-        if not Path(self.env['python']).is_file() or not (Path(self.env['sd_scripts']) / 'moss_image_train_network.py').is_file():
+        env = selected_environment(self.env, self.probe_settings)
+        if not environment_valid(env):
             messagebox.showerror(tr('実行環境'), tr('学習用 Python と MOSS 対応 sd-scripts を指定してください。'), parent=self)
             return
         self.set_busy(True, tr('環境をチェック中…'))
         self.progress_text.set(tr('実行環境を確認中'))
         self.notebook.select(self.monitor)
-        env = copy.deepcopy(self.env)
+        env = selected_environment(self.env, self.probe_settings)
         language = self.language
         def worker():
             set_language(language)
@@ -1131,7 +1155,7 @@ class App(tk.Tk):
             if not self.save():
                 return
             self.pending_project = copy.deepcopy(project)
-            self.pending_env = copy.deepcopy(self.env)
+            self.pending_env = selected_environment(self.env, project['settings'])
             self.training_progress.reset()
             self.progress_text.set(tr('実行前チェック中'))
             self.set_busy(True, tr('環境をチェック中…'))
@@ -1164,13 +1188,13 @@ class App(tk.Tk):
                 self.append_log(tr('再開元: {p0}\n保存 STEP: {p1} / epoch: {p2}\n', p0=resumed['path'], p1=resumed['step'], p2=resumed['epoch']))
                 if not resumed['snapshot']:
                     self.append_log(tr('元設定の snapshot がないため設定差の自動比較はできません。\n'))
-            if not info.get('triton') and p['settings']['memory']['convrot_int8']:
+            if (not info.get('triton') or info.get('triton_runtime') is False) and p['settings']['memory']['convrot_int8']:
                 self.append_log(tr('Triton なし: ConvRot INT8 は bf16 fallback を使用するため速度が低下する場合があります。\n'))
             self.append_log(tr('実行フォルダ: {p0}\n', p0=folder) + subprocess.list2cmdline(argv) + '\n\n')
             self.operation = 'training'
             self.training_progress.reset()
             self.progress_text.set(tr('モデル読込・キャッシュ準備中（学習開始後に終了時刻を推定）'))
-            self.runner.start(argv, env['sd_scripts'], folder)
+            self.runner.start(argv, source_dir(env), folder)
             self.run_started = time.monotonic()
             self.run_finished = None
             self.gpu_monitor.start()

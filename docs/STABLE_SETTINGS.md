@@ -1,57 +1,74 @@
-# 12GB向け設定の目安 / Starting settings for 12GB
+# 学習設定・モデルガイド / Training settings and models
 
-新規学習の開始設定です。データに応じて調整してください。
-Starting values for new training; adjust to your dataset.
+## Kohakuの新規初期値
 
-| 項目 / Setting | Kohaku | sd-scripts |
+学習条件は [Kohaku公式のLoRA共通設定](https://github.com/KohakuBlueleaf/KohakuMossTrainer/blob/0c4737e3b8787a7df0f2d28a2972640a5f8522f6/configs/moss/_base/base_lora.py) に合わせています。
+12GB向けのメモリ構成・batch・トークン量は、公式レシピとは分けてこのGUIの開始設定を使用します。
+公式値はすべてのデータでの最適値を保証するものではありません。
+
+Training defaults follow the upstream Kohaku LoRA recipe. Memory, batch size and token budget retain this GUI's 12GB starting configuration.
+
+| 項目 / Setting | Kohaku新規初期値 | sd-scriptsの開始目安（手動で設定） |
 | --- | --- | --- |
 | 解像度 / Resolution | 1024 | 1024 |
+| Rank / Alpha | 32 / 32 | 16 / 1 |
+| Optimizer | AdamW | AdamW8bit |
+| 学習率 / Learning rate | 1e-4 | 1e-4 |
+| Scheduler / Warmup | cosine / 100 steps | constant / 0 |
+| 最小学習率 / Minimum LR | 初期値の10%（1e-5） | constantのため固定1e-4 |
+| 学習上限 / Total steps | 4000 | 1500（対象に応じて調整） |
+| 保存間隔 / Save interval | 500 steps | 100 steps |
+| Caption dropout | 0.1 | 0.05 |
+| 勾配クリップ / Gradient clipping | 1 | 1 |
 | Batch / 勾配累積 / Accumulation | 1 / 1 | 1 / 1 |
-| Rank / Alpha | 16 / 1 | 16 / 1 |
-| Optimizer / LR | AdamW8bit / 1e-4 | AdamW8bit / 1e-4 |
-| Scheduler / Warmup | constant / 0 | constant / 0 |
-| 勾配クリップ / Grad clip | 1 | 1 |
-| DiT・Qwen / DiT and Qwen | INT8モデルファイル / INT8 model files | ConvRot INT8 ON |
-| メモリ構成 / Memory profile | ckpt-resident | block swap 16 |
+| DiT・Qwen | INT8モデルファイル | ConvRot INT8 ON |
+| メモリ構成 / Memory | ckpt-resident | block swap 16 |
 | ベース計算 / Base precision | auto | INT8 backward bf16 |
-| Token limit | 6144 (画像＋テキスト / image + text) | text 4096 |
-| Gradient checkpointing | ON (profile) | ON |
-| CPU / Unsloth offload | profile | OFF / OFF |
+| キャプション上限（01モデル） | 4096 | 4096 |
+| 画像＋テキスト上限（04 VRAM） | 6144 | 対象外 |
+| Gradient checkpointing | ON（profile） | ON |
+| CPU / Unsloth offload | profileに従う | OFF / OFF |
 | Attention | 自動 / automatic | torch |
-| Latent・text disk cache | ON / ON | ON / ON |
+| Latent / text disk cache | ON / ON | ON / ON |
 | DataLoader workers / CPU threads | 2 / 2 | 2 / 2 |
-| torch.compile | OFF | OFF |
-| 学習中サンプル / Training samples | OFF | OFF |
+| torch.compile / 学習中サンプル | OFF / OFF | OFF / OFF |
 
-## Kohaku
+Kohaku公式のメモリ構成balanced・token batching・MAX_TOKENS=12288はそのまま採用していません。
+このGUIは12GB向けにckpt-resident・画像枚数でbatch 1・MAX_TOKENS=6144を使用し、seedは従来の42を維持しています。
+新規初期値はKohaku用です。エンジンをsd-scriptsへ切り替えても学習条件を自動上書きしないため、右列の値を手動で設定してください。
 
-torch.compileは現環境のINT8・ckpt-residentで再計算エラーを確認したためOFFを維持します。詳細は [開発・検証](../CONTRIBUTING.md#検証状況) を参照。
+Switching engines does not reset training settings. For sd-scripts, manually apply the right-hand column.
 
+## 既存プロジェクトとstate再開
 
-RTX 4070 12GBの各12STEP短期比較で、従来の省メモリ構成は4.518秒/step、
-ckpt-residentは4.102秒/step、デバイスVRAMは約10.3GiBでした。
-画像・キャプションによって必要VRAMと速度は変わります。
-VRAM不足時は ckpt-ring4-actoff-optstream-gradoff を選択してください。
-autoは保存精度を維持します。bf16モデルファイルを自動でINT8に量子化しません。
-AdamW8bitの状態はGPU、fused_step=False、自動チューニングOFFです。
+保存済みのRank・Alpha・Optimizer・Scheduler・保存間隔などは変更しません。
+旧版のcosineは最小学習率0%だったため、新しい「Kohaku: 最小学習率の比率」が未指定の場合は0を補います。
+新規プロジェクトは0.1です。state再開では最小学習率の比率も照合します。
+既存の16/1のstateを32/32へ変更して再開することはできません。
+現GUIのKohakuでは、constant以外のSchedulerで総STEP上限を変える追加学習は非対応です。cosineでは最初に総学習計画を決めてください。
 
-Short RTX 4070 12GB benchmark: 4.518 s/step with the previous offload profile,
-4.102 s/step and about 10.3 GiB device VRAM with ckpt-resident.
-Memory and speed depend on images and captions. If VRAM runs out, use
-ckpt-ring4-actoff-optstream-gradoff. auto preserves stored precision; it does not
-quantize bf16 model files to INT8. AdamW8bit states stay on GPU, fused_step=False,
-and automatic tuning is disabled.
+Saved settings remain unchanged. Older cosine projects keep their 0% floor. New projects use 10%.
+State resume checks the LR floor as well as rank, alpha, optimizer and scheduler.
+Kohaku currently supports changing the total step limit on resume only with constant scheduling.
 
-## プリセット / Presets
+## 12GB向け設定と実測の範囲
 
-既存プロジェクトの保存値は自動変更しません。プリセットボタンはVRAM関連項目とbatchのみ変更します。
+INT8のDiTとQwenモデルを指定してください。autoは保存精度を維持し、bf16ファイルを自動でINT8に量子化しません。
+VRAM不足時はckpt-ring4-actoff-optstream-gradoffへ変更できます。
+AdamW8bitを選ぶ場合はGPU状態・fused_step=Falseを使用します。自動チューニングとtorch.compileはOFFです。
+
+従来のRank16/Alpha1・AdamW8bit・constantで、RTX 4070 12GBの短期診断は約4.10秒/step・約10.3GiBでした。
+これは新しい32/32・AdamW・cosineの速度・VRAM・画質を測定した値ではありません。
+torch.compileは従来構成で再計算エラーが発生したためOFFを維持します。
+
+Previous short benchmark: about 4.10 s/step and 10.3 GiB on RTX 4070 12GB with rank16/alpha1, AdamW8bit and constant.
+The new rank32/alpha32, AdamW, cosine recipe has not yet been benchmarked or quality-compared.
+
+## VRAMプリセット
+
+プリセットはメモリ関連項目とbatchのみ変更し、Rank・Optimizer・Schedulerは変更しません。
 sd-scriptsの16GBはINT8 / swap 0、24GB以上はbf16 / swap 0が開始値です。
-どちらもbatch 1・checkpointing・disk cache ON。8GB向けプリセットはありません。
-
-Existing saved projects are preserved. Preset buttons change VRAM-related options
-and batch size only. sd-scripts starts with INT8 / swap 0 on 16GB and bf16 / swap 0
-on 24GB+, both with batch 1, checkpointing and disk caches ON. No 8GB preset.
-
+batch 1・checkpointing・disk cache ON。8GB向けプリセットはありません。
 
 ## 推奨モデルとダウンロード
 

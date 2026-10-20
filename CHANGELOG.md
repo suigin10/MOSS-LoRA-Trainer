@@ -1,5 +1,11 @@
 # 変更履歴
 
+## 未リリース — 2026-10-21
+
+- 新規学習条件をKohaku公式LoRAレシピに合わせ、32/32・AdamW・cosine・warmup100・下限10%・4000step・500step保存・caption dropout0.1へ変更。
+- cosine下限をGUIで設定可能にし、既存プロジェクトの下限0%とstate再開互換性を保持。
+- 設定ガイド・README・日英UIを更新し、sd-scriptsの開始値と過去の速度測定条件を明記。
+
 ## 0.2.0 — 2026-10-20
 
 - 主要表示名をMOSS Studio with Kohakuに変更。KohakuMossのライセンス本文・通知を収録。

@@ -85,7 +85,7 @@ def knobs(project, run_dir):
     run_dir = Path(run_dir).resolve()
     schedule = {'mode': t['lr_scheduler'].replace('constant_with_warmup', 'constant'),
                 'warmup': t['lr_warmup_steps'] if t['lr_scheduler'] != 'constant' else 0,
-                'end': -1, 'min_value': 0.0 if t['lr_scheduler'] in ('linear', 'cosine') else 1.0}
+                'end': -1, 'min_value': t.get('kohaku_lr_min_ratio', 0.0) if t['lr_scheduler'] == 'cosine' else 0.0 if t['lr_scheduler'] == 'linear' else 1.0}
     if t['lr_scheduler'] == 'linear':
         schedule.update(mode='polynomial', power=1)
     out = {

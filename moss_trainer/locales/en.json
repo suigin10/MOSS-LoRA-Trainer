@@ -454,5 +454,22 @@
   "Kohaku: INT8のDiT・Qwenモデル / メモリ構成 ckpt-resident / ベース計算 auto / トークン上限6144\nRTX 4070 12GBの短期実測: 約4.10秒/step・VRAM約10.3GiB。自動チューニングOFF。\nVRAM不足時はckpt-ring4-actoff-optstream-gradoffへ。autoはモデル精度を維持し、bf16を自動でINT8にはしません。": "Kohaku: INT8 DiT and Qwen model files / memory ckpt-resident / base precision auto / token limit 6144\nShort RTX 4070 12GB benchmark: about 4.10 s/step and 10.3 GiB VRAM. Auto-tuning OFF.\nIf VRAM runs out, use ckpt-ring4-actoff-optstream-gradoff. auto preserves model precision; it does not quantize bf16 files to INT8.",
   "sd-scripts: DiT・Qwen ConvRot INT8 ON / INT8 backward bf16 / block swap 16\nGradient checkpointing ON / CPU・Unsloth offload OFF / Attention torch\nDataLoader workers 2 / CPUスレッド2 / 学習中サンプルOFF（両エンジン共通）": "sd-scripts: DiT and Qwen ConvRot INT8 ON / INT8 backward bf16 / block swap 16\nGradient checkpointing ON / CPU and Unsloth offload OFF / Attention torch\nDataLoader workers 2 / CPU threads 2 / training samples OFF (both engines)",
   "モデル・画像・キャプションで必要VRAMと速度は変わります。既存プロジェクトは保存済みの設定を維持します。プリセットはVRAM関連項目とbatchのみ変更します。": "VRAM use and speed depend on models, images and captions. Existing projects retain saved settings. Presets change VRAM-related options and batch size only.",
-  "設定ガイド": "Settings guide"
+  "設定ガイド": "Settings guide",
+  "Kohaku公式LoRA初期値32。sd-scriptsの開始値は設定ガイドを参照": "Kohaku LoRA default: 32. See the settings guide for sd-scripts starting values.",
+  "Kohaku公式LoRA初期値32。Rank・Alphaはstate再開時に変更できません": "Kohaku LoRA default: 32. Rank and alpha must stay unchanged for state resume.",
+  "Kohaku: 最小学習率の比率": "Kohaku: minimum LR ratio",
+  "cosine専用。0.1は初期学習率の10%。既存設定の未指定値は従来の0を維持": "Cosine only. 0.1 means 10% of the initial LR. Older settings without this field retain 0.",
+  "Kohaku公式初期値0.1。TE キャッシュと併用可能": "Kohaku default: 0.1. Compatible with text encoder output caches.",
+  "Kohaku公式初期値4000。画像数・学習対象に応じて調整": "Kohaku default: 4000. Adjust for the dataset and training subject.",
+  "Kohaku公式初期値500。自由に変更できます": "Kohaku default: 500. You can change this interval.",
+  "500 steps ごとに state も保存（新規初期値）": "Save state every 500 steps (new-project default)",
+  "キャプションの最大トークン数": "Maximum caption tokens",
+  "テキストのみの上限。初期値4096。短くすると長い説明が切れます。画像との合計上限は04 VRAMのKohaku設定": "Text-only limit; default 4096. Lower values truncate long captions. The combined image/text limit is in 04 VRAM under Kohaku.",
+  "Kohaku公式初期値はAdamW。AdamW8bitは省メモリの選択肢。Adafactorはsd-scripts専用": "Kohaku defaults to AdamW. AdamW8bit is a lower-memory alternative. Adafactor is for sd-scripts only.",
+  "Kohaku公式初期値はcosine。state再開では元の設定を維持": "Kohaku defaults to cosine. Keep the original scheduler for state resume.",
+  "Kohaku公式初期値100。開始時に学習率を徐々に上げるstep数。constantでは使用しません": "Kohaku default: 100 steps to ramp up the learning rate. Unused with constant.",
+  "Kohaku: 画像＋テキストのトークン上限": "Kohaku: image + text token limit",
+  "12GB向け初期値6144。合計が超過するとテキストを切り詰めます。01モデルの上限はテキスト単体に適用": "12GB starting value: 6144. Text is truncated when the combined limit is exceeded. The limit in 01 Model applies to text only.",
+  "stateもLoRAと同じ保存間隔（新規初期値500 steps）": "Save state with LoRA (new-project default: every 500 steps)",
+  "sd-scripts、またはKohakuのconstantでは総上限を増やして追加学習できます。Kohakuのcosine等では元の総上限を維持してください。": "You can extend the total limit with sd-scripts or Kohaku constant. With Kohaku cosine and other schedules, keep the original total limit."
 }

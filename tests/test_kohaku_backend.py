@@ -27,6 +27,7 @@ class KohakuTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.store = ProjectStore(self.root / 'projects')
         self.p = self.store.create('Kohaku')
+        self.p['settings'] = defaults('sd-scripts')
         self.p['settings']['memory']['backend'] = 'kohaku'
         images = self.root / '画像 with spaces'
         images.mkdir()
@@ -35,6 +36,37 @@ class KohakuTests(unittest.TestCase):
         self.p['subsets'] = [{'image_dir': str(images), 'num_repeats': 2, 'class_tokens': 'fallback'}]
         self.env = {'python': 'old/python', 'sd_scripts': 'old/scripts',
                     'kohaku_python': sys.executable, 'kohaku_source': str(self.root / 'Kohaku source')}
+
+    def test_official_defaults_and_cosine_floor_are_exported(self):
+        fresh = self.store.create('official')
+        values = knobs(fresh, self.root)
+        self.assertEqual((values['DIM'], values['ALPHA']), (32, 32.0))
+        self.assertEqual(values['OPTIMIZER'], 'adamw')
+        self.assertEqual(values['LR'], 1e-4)
+        self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
+        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (4000, 500, 0.1))
+        self.assertNotIn('kohaku_lr_min_ratio', training_config(fresh, self.root))
+        fresh['settings']['training']['lr_scheduler'] = 'linear'
+        self.assertEqual(knobs(fresh, self.root)['SCHEDULE']['min_value'], 0.0)
+        fresh['settings']['training']['kohaku_lr_min_ratio'] = 1.1
+        self.assertTrue(validate(fresh))
+
+    def test_legacy_cosine_keeps_zero_floor_and_resume_checks_changes(self):
+        from moss_trainer.core import resume_differences
+        self.p['settings']['training']['lr_scheduler'] = 'cosine'
+        del self.p['settings']['training']['kohaku_lr_min_ratio']
+        original = copy.deepcopy(self.p)
+        self.store.save(self.p)
+        loaded = self.store.load(self.store.directory(self.p) / 'project.json')
+        self.assertEqual(loaded['settings']['training']['kohaku_lr_min_ratio'], 0.0)
+        self.assertEqual(knobs(loaded, self.root)['SCHEDULE']['min_value'], 0.0)
+        info = {'backend': 'kohaku', 'snapshot': original}
+        self.assertEqual(resume_differences(loaded, info), [])
+        loaded['settings']['training']['kohaku_lr_min_ratio'] = 0.1
+        self.assertTrue(resume_differences(loaded, info))
+        loaded['settings']['training']['kohaku_lr_min_ratio'] = 0.0
+        again = self.store.create('legacy-copy', source=loaded)
+        self.assertEqual(again['settings']['training']['kohaku_lr_min_ratio'], 0.0)
 
     def test_old_projects_and_environment_keep_sd_scripts(self):
         old = copy.deepcopy(self.p)

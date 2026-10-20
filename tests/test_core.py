@@ -22,7 +22,7 @@ class CoreTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.store = ProjectStore(self.root / 'projects')
         self.p = self.store.create('テスト project')
-        self.p['settings']['memory']['backend'] = 'sd-scripts'
+        self.p['settings'] = defaults('sd-scripts')
         self.images = self.root / '画像 with spaces'
         self.images.mkdir()
         (self.images / '猫.png').write_bytes(b'fixture')

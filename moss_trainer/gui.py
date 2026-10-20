@@ -216,7 +216,7 @@ class ResumeDialog(tk.Toplevel):
         self.target = tk.StringVar(value='1500')
         self.target_entry = ttk.Entry(limit_row, textvariable=self.target, width=10)
         self.target_entry.pack(side='left')
-        ttk.Label(body, text=tr('総上限を増やすと最終stateからも追加学習できます。例: 保存1500 STEP → 総上限3000 STEP。追加分は1500 STEPです。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=10)
+        ttk.Label(body, text=tr('sd-scripts、またはKohakuのconstantでは総上限を増やして追加学習できます。Kohakuのcosine等では元の総上限を維持してください。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=10)
         ttk.Label(body, text=tr('上限変更時はOptimizerの状態と累積STEPを保持し、LRを新しい総上限のスケジュールで再計算します。cosine / linearでは再開時のLRが変わります。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=6)
         ttk.Label(body, text=tr('state は optimizer / scheduler / 乱数状態を含みます。LoRA 単体から始める場合は「初期 LoRA 重み」を使用してください。'), style='Hint.TLabel', wraplength=910).pack(anchor='w', pady=10)
         controls = ttk.Frame(self, padding=(20, 12))
@@ -273,7 +273,7 @@ class ResumeDialog(tk.Toplevel):
             p = self.app.collect()
             if self.restore.get() and info['snapshot']:
                 source = info['snapshot']
-                s = defaults()
+                s = defaults('sd-scripts')
                 for group in s:
                     s[group].update(source['settings'].get(group, {}))
                 p.update(settings=s, subsets=copy.deepcopy(source['subsets']))
@@ -471,7 +471,7 @@ class App(tk.Tk):
                 resumebar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 12))
                 ttk.Button(resumebar, text=tr('stateから再開・追加学習…'), command=self.resume_dialog).pack(side='left')
                 ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
-                ttk.Label(resumebar, text=tr('100 steps ごとに state も保存（初期値）'), style='Hint.TLabel').pack(side='left', padx=8)
+                ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値500 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
                 row = 2
             elif group == 'memory':
                 presets = ttk.Frame(page.body)
@@ -789,7 +789,7 @@ class App(tk.Tk):
                 pass
             var.set(0)
         elif var.get() == '0':
-            var.set(self.step_memory.get(pid, 1500))
+            var.set(self.step_memory.get(pid, FIELDS['training']['max_train_steps'][1]))
         self.update_stop_mode()
 
     def update_stop_mode(self):

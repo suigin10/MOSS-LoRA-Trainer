@@ -26,7 +26,7 @@ FIELDS = {
         'text_encoder': ('Qwen3.5-9B', '', 'file', 'bf16 / ConvRot INT8。W4A8 GPTQ は非対応'),
         'vae': ('FLUX.2 VAE', '', 'file', '推奨: flux2-vae.safetensors'),
         'tokenizer_cache_dir': ('Tokenizer / HF cache', '', 'dir', '空欄: 初回に Hugging Face から自動取得'),
-        'moss_max_token_length': ('最大トークン数', 4096, None, '公式上限 4096。短くすると長いキャプションが切り詰められます'),
+        'moss_max_token_length': ('キャプションの最大トークン数', 4096, None, 'テキストのみの上限。初期値4096。短くすると長い説明が切れます。画像との合計上限は04 VRAMのKohaku設定'),
     },
     'dataset': {
         'resolution': ('学習解像度', 1024, None, '正方形の基準解像度。16 の倍数'),
@@ -38,25 +38,26 @@ FIELDS = {
         'bucket_no_upscale': ('小さい画像を拡大しない', True, None, ''),
         'caption_extension': ('キャプション拡張子', '.txt', None, '画像と同じ名前の .txt を使用'),
         'enable_multiline_caption': ('複数行キャプション', True, None, '自然文キャプションの改行を保持'),
-        'caption_dropout_rate': ('Caption dropout', 0.05, None, '開始値 0.05。TE キャッシュと併用可能'),
+        'caption_dropout_rate': ('Caption dropout', 0.1, None, 'Kohaku公式初期値0.1。TE キャッシュと併用可能'),
         'shuffle_caption': ('キャプションをシャッフル', False, None, 'TE キャッシュと併用不可。自然文では通常 OFF'),
         'color_aug': ('色の拡張', False, None, 'Latent キャッシュと併用不可'),
         'random_crop': ('ランダムクロップ', False, None, 'Latent キャッシュと併用不可'),
     },
     'training': {
         'output_name': ('出力 LoRA 名', 'moss_lora', None, 'safetensors のファイル名（拡張子不要）'),
-        'network_dim': ('Rank / dim', 16, None, '公式例の 16 を開始値に使用'),
-        'network_alpha': ('Alpha', 1.0, None, '学習率 1e-4 は alpha=1 の開始値。alpha を上げる際は学習率も再調整'),
+        'network_dim': ('Rank / dim', 32, None, 'Kohaku公式LoRA初期値32。sd-scriptsの開始値は設定ガイドを参照'),
+        'network_alpha': ('Alpha', 32.0, None, 'Kohaku公式LoRA初期値32。Rank・Alphaはstate再開時に変更できません'),
         'learning_rate': ('学習率', 0.0001, None, '固定の最適値ではありません。データセットに応じて調整'),
-        'optimizer_type': ('Optimizer', 'AdamW8bit', ['AdamW8bit', 'AdamW', 'Adafactor'], 'AdamW8bit は bitsandbytes が必要'),
-        'lr_scheduler': ('LR scheduler', 'constant', ['constant', 'constant_with_warmup', 'cosine', 'linear'], ''),
-        'lr_warmup_steps': ('Warmup steps', 0, None, ''),
+        'optimizer_type': ('Optimizer', 'AdamW', ['AdamW8bit', 'AdamW', 'Adafactor'], 'Kohaku公式初期値はAdamW。AdamW8bitは省メモリの選択肢。Adafactorはsd-scripts専用'),
+        'lr_scheduler': ('LR scheduler', 'cosine', ['constant', 'constant_with_warmup', 'cosine', 'linear'], 'Kohaku公式初期値はcosine。state再開では元の設定を維持'),
+        'lr_warmup_steps': ('Warmup steps', 100, None, 'Kohaku公式初期値100。開始時に学習率を徐々に上げるstep数。constantでは使用しません'),
+        'kohaku_lr_min_ratio': ('Kohaku: 最小学習率の比率', 0.1, None, 'cosine専用。0.1は初期学習率の10%。既存設定の未指定値は従来の0を維持'),
         'max_train_epochs': ('学習エポック数（steps=0 時）', 10, None, '最大 steps が 0 の場合だけ使用'),
-        'max_train_steps': ('最大 steps（0: エポック指定）', 1500, None, '今回の開始値 1500。画像数・学習対象で調整。まず 300 steps の試走も推奨'),
+        'max_train_steps': ('最大 steps（0: エポック指定）', 4000, None, 'Kohaku公式初期値4000。画像数・学習対象に応じて調整'),
         'gradient_accumulation_steps': ('勾配累積', 1, None, '実効バッチ数 = バッチサイズ × 勾配累積'),
         'max_grad_norm': ('勾配クリップ', 1.0, None, 'Adafactor 選択時は書き出し時に 0 を使用'),
         'save_every_n_epochs': ('何エポックごとに保存（0: 無効）', 0, None, ''),
-        'save_every_n_steps': ('何 steps ごとに保存（0: 無効）', 100, None, '初期値 100。自由に変更できます'),
+        'save_every_n_steps': ('何 steps ごとに保存（0: 無効）', 500, None, 'Kohaku公式初期値500。自由に変更できます'),
         'save_state': ('再開用の optimizer state も保存', True, None, 'モデルの保存間隔に合わせて保存。ディスク使用量が増えます'),
         'keep_latest_state_only': ('state は最新の1つだけ保持', True, None, '新しいstateの保存成功後に、この実行で作成した古いstateだけを削除。LoRAは削除しません'),
         'save_state_on_train_end': ('正常終了時にも state を保存', True, None, '強制停止時には保存できません。直近の保存済み state から再開'),
@@ -69,7 +70,7 @@ FIELDS = {
         'backend': ('学習エンジン', 'kohaku', ['sd-scripts', 'kohaku'], 'Kohaku用環境は「かんたん導入」で別途作成。再開stateはエンジン間で共有できません'),
         'kohaku_memory_profile': ('Kohaku: メモリ構成', 'ckpt-resident', ['ckpt-ring4-actoff-optstream-gradoff', 'low', 'balanced', 'ckpt-resident', 'minimal', 'auto'], '12GBのINT8モデル向け初期値はckpt-resident。VRAM不足時はckpt-ring4-actoff-optstream-gradoffへ。下のswap・offload・Attentionはsd-scripts用'),
         'kohaku_base_precision': ('Kohaku: ベース計算', 'auto', ['auto', 'int8', 'fp8_compute'], 'autoはモデルの保存精度。FP8は対応GPUで実測比較してください'),
-        'kohaku_max_tokens': ('Kohaku: トークン上限', 6144, None, '画像＋テキストの上限。12GB向け開始値6144。KohakuはMOSS objectiveと独自の解像度計画を使用'),
+        'kohaku_max_tokens': ('Kohaku: 画像＋テキストのトークン上限', 6144, None, '12GB向け初期値6144。合計が超過するとテキストを切り詰めます。01モデルの上限はテキスト単体に適用'),
         'convrot_int8': ('DiT: ConvRot INT8', True, None, 'VRAM 12GB 向けの開始設定。量子化済みチェックポイントも自動検出されます'),
         'convrot_int8_text_encoder': ('Qwen: ConvRot INT8', True, None, 'VRAM 12GB 向けの開始設定。キャッシュ時の VRAM を削減'),
         'convrot_int8_bwd': ('INT8 backward', 'bf16', ['bf16', 'int8'], 'bf16 が高精度。int8 は Triton / CUDA が必要'),
@@ -124,8 +125,16 @@ FIELDS = {
 ENV_DEFAULTS = {'python': '', 'sd_scripts': '', 'kohaku_python': '', 'kohaku_source': ''}
 
 
-def defaults():
-    return {group: {key: copy.deepcopy(spec[1]) for key, spec in fields.items()} for group, fields in FIELDS.items()}
+def defaults(backend_name='kohaku'):
+    settings = {group: {key: copy.deepcopy(spec[1]) for key, spec in fields.items()} for group, fields in FIELDS.items()}
+    if backend_name == 'sd-scripts':
+        # Historical fallback for saved projects/snapshots, not a backend-switch action.
+        settings['memory']['backend'] = 'sd-scripts'
+        settings['training'].update(network_dim=16, network_alpha=1.0, optimizer_type='AdamW8bit',
+                                    lr_scheduler='constant', lr_warmup_steps=0, kohaku_lr_min_ratio=0.0,
+                                    max_train_steps=1500, save_every_n_steps=100)
+        settings['dataset']['caption_dropout_rate'] = 0.05
+    return settings
 
 
 def apply_preset(settings, preset):
@@ -209,7 +218,7 @@ class ProjectStore:
             if not isinstance(sub.get('image_dir'), str) or type(sub.get('num_repeats')) is not int or not isinstance(sub.get('class_tokens'), str):
                 raise ValueError(tr('画像サブセットの型が不正です'))
         # Missing known fields get defaults; unknown fields are rejected, never silently launched.
-        merged = defaults()
+        merged = defaults('sd-scripts')
         # A project saved before backend selection existed always used sd-scripts.
         merged['memory']['backend'] = p['settings'].get('memory', {}).get('backend', 'sd-scripts')
         for group, values in p['settings'].items():
@@ -267,7 +276,7 @@ def validate(project, env=None, files=False):
     require(bool(re.fullmatch(r'[^<>:"/\\|?*\x00-\x1f]+', t['output_name'])) and t['output_name'] not in ('.', '..') and not t['output_name'].endswith((' ', '.')), tr('出力 LoRA 名に使用できない文字があります'))
     require(not re.fullmatch(r'(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?', t['output_name']), tr('Windows の予約名は出力名に使用できません'))
     require(d['caption_extension'].startswith('.') and not re.search(r'[/\\\s]', d['caption_extension']), tr('キャプション拡張子は .txt の形式で入力してください'))
-    for group, key in (('dataset', 'caption_dropout_rate'), ('flow', 'rank_dropout'), ('flow', 'module_dropout')):
+    for group, key in (('training', 'kohaku_lr_min_ratio'), ('dataset', 'caption_dropout_rate'), ('flow', 'rank_dropout'), ('flow', 'module_dropout')):
         require(0 <= s[group][key] <= 1, tr('{p0}: 0〜1 にしてください', p0=key))
     require(0 <= m['blocks_to_swap'] <= 40, tr('Block swap は 0〜40 にしてください'))
     modes = sum([m['blocks_to_swap'] > 0, m['cpu_offload_checkpointing'], m['unsloth_offload_checkpointing']])
@@ -405,16 +414,18 @@ def resume_differences(project, info):
         'flow': tuple(FIELDS['flow']),
         'memory': ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'),
         'training': ('network_dim', 'network_alpha', 'optimizer_type', 'lr_scheduler', 'learning_rate',
-                     'lr_warmup_steps', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
+                     'lr_warmup_steps', 'kohaku_lr_min_ratio', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
     }.items():
         for key in keys:
+            if key == 'kohaku_lr_min_ratio' and (backend(project['settings']) != 'kohaku' or project['settings']['training']['lr_scheduler'] != 'cosine'):
+                continue
             if (group == 'memory' and key == 'kohaku_memory_profile'
                     and backend(project['settings']) == 'kohaku'
                     and project['settings']['training']['optimizer_type'] == 'AdamW8bit'
                     and info.get('can_change_memory_profile')):
                 # These profiles keep the same unfused bitsandbytes optimizer state.
                 continue
-            original = source['settings'].get(group, {}).get(key, 'sd-scripts' if key == 'backend' else FIELDS[group][key][1])
+            original = source['settings'].get(group, {}).get(key, 'sd-scripts' if key == 'backend' else 0.0 if key == 'kohaku_lr_min_ratio' else defaults('sd-scripts')[group][key])
             if project['settings'][group][key] != original:
                 differences.append(tr('state 再開の設定差: {p0}。元設定を復元するか、LoRA 重みから追加学習してください', p0=tr(FIELDS[group][key][0])))
     if project['subsets'] != source['subsets']:
@@ -484,6 +495,7 @@ def training_config(project, run_dir):
         config.update({k: v for k, v in s[group].items() if v != ''})
     for key in ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'):
         config.pop(key, None)
+    config.pop('kohaku_lr_min_ratio', None)  # Kohaku-only scheduler parameter
     config.pop('keep_latest_state_only', None)
     config.pop('num_cpu_threads_per_process', None)  # accelerate launch option, not a trainer argument
     if not s['training']['resume']:

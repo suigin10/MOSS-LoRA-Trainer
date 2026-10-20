@@ -11,7 +11,7 @@ from tkinter import ttk
 import unittest
 from unittest.mock import patch
 
-from moss_trainer.core import FIELDS, atomic_json, training_config
+from moss_trainer.core import FIELDS, atomic_json, training_config, defaults
 from moss_trainer.gui import App, ProjectDialog, ResumeDialog, ImportDialog
 from moss_trainer.i18n import ENGLISH, set_language, tr
 
@@ -58,7 +58,8 @@ class EnglishGuiTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.data_dir = Path(self.temp.name) / 'data'
         self.app = App(self.data_dir)
-        self.app.variables[('memory', 'backend')].set('sd-scripts')
+        self.app.project['settings'] = defaults('sd-scripts')
+        self.app.load_project(self.app.project)
         self.app.save()
         self.addCleanup(self.app.destroy)
         self.addCleanup(set_language, 'ja')

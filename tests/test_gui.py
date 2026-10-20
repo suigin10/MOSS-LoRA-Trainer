@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from moss_trainer.gui import App, ProjectDialog, ResumeDialog, ImportDialog, ScrollPage
-from moss_trainer.core import atomic_json
+from moss_trainer.core import atomic_json, defaults
 
 
 class GuiTests(unittest.TestCase):
@@ -16,7 +16,8 @@ class GuiTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = App(Path(self.temp.name) / 'data')
         # These regression cases exercise the existing sd-scripts workflow.
-        self.app.variables[('memory', 'backend')].set('sd-scripts')
+        self.app.project['settings'] = defaults('sd-scripts')
+        self.app.load_project(self.app.project)
         self.app.save()
         self.addCleanup(self.app.destroy)
         self.app.update()
@@ -189,7 +190,7 @@ class GuiTests(unittest.TestCase):
         dialog = ProjectDialog(self.app)
         dialog.name.set('デフォルト新規')
         dialog.create()
-        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 16)
+        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 32)
         self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
 
     def test_busy_locks_project_controls(self):

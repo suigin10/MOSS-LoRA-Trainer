@@ -10,6 +10,8 @@ Kohaku uses KohakuMoss License 1.0, based on Apache-2.0 with an additional namin
 
 This integration supports step-based LoRA training, disk caches, AdamW/AdamW8bit, checkpoint resume and step-based sampling. It rejects epoch limits, initial LoRA weights, per-module settings, Text embedder training, random augmentation and inline sample options. Kohaku uses its own MOSS objective and resolution planner. Its resume checkpoints cannot be shared with sd-scripts. Checkpoints are under `runs/<run>/kohaku/checkpoints`; LoRA exports are also copied to `runs/<run>/models` before old checkpoints are pruned.
 
+New Kohaku training follows the official recipe: rank/alpha 32/32, AdamW, LR 1e-4, cosine with 100 warmup steps and a 10% LR floor, 4000 total steps, save every 500 steps and caption dropout 0.1. Existing projects retain saved values, including the 0% floor of older cosine settings. The 12GB memory configuration stays INT8 / ckpt-resident / batch 1 / 6144 joint tokens. See [the settings guide](STABLE_SETTINGS.md) for both engines. The earlier 4.10 s/step measurement used rank16/alpha1 and AdamW8bit; it is not a benchmark of the new recipe.
+
 The following guide describes the existing sd-scripts workflow:
 
 # MOSS Studio — English quick start

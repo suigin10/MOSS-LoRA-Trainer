@@ -25,8 +25,8 @@ CUDA / bf16対応のNVIDIA GPUが対象です。Kohakuの導入には対応ド�
 
 ## 新規学習の初期値
 
-Kohakuの学習条件は公式LoRAレシピを参考に、**Rank/Alpha 32/32、AdamW、LR 1e-4、cosine、warmup 100、最小学習率10%、1500step、100stepごと保存、caption dropout 0.1**を使用します。
-学習上限1500step・保存間隔100stepは、使いやすさを優先したこのGUI独自の初期値です（公式共通設定は4000step・500step保存）。
+Kohakuの学習条件は公式LoRAレシピを参考に、**Rank/Alpha 32/32、AdamW8bit、LR 1e-4、cosine、warmup 100、最小学習率10%、4000step、200stepごと保存、caption dropout 0.1**を使用します。
+学習上限は公式共通設定と同じ4000stepです。このGUIでは省メモリのAdamW8bitと200stepごと保存を初期値にしています（公式共通設定はAdamW・500step保存）。
 INT8・ckpt-resident・batch 1・画像＋テキスト上限6144は、このGUIの12GB向け開始設定です。
 
 既存プロジェクトとstateの保存設定は維持します。旧cosineの最小学習率は従来の0%を保持します。
@@ -44,7 +44,7 @@ Kohakuとsd-scriptsのstateは相互利用できません。更新時はアプ�
 
 ## 現在の確認状況
 
-**旧設定で1500STEPの学習完走を、利用者のRTX 4070 12GB実機で確認済みです（2026-10-21報告）。** 100STEP学習と50STEP追加学習も確認済みです。旧設定（Rank16/Alpha1・AdamW8bit・constant、INT8・ckpt-resident）の短期診断は約4.10秒/step、デバイスVRAM約10.3GiBでした。**新設定（Rank32/Alpha32・AdamW・cosine）でも300STEPの動作確認済みです（利用者報告、2026-10-21）。** 旧設定の速度・VRAM測定値は、新設定の測定値とは区別しています。生成品質の比較と、新しい公式準拠設定での長時間完走は未確認です。詳細は開発・検証文書にまとめています。
+**旧設定で1500STEPの学習完走を、利用者のRTX 4070 12GB実機で確認済みです（2026-10-21報告）。** 100STEP学習と50STEP追加学習も確認済みです。旧設定（Rank16/Alpha1・AdamW8bit・constant、INT8・ckpt-resident）の短期診断は約4.10秒/step、デバイスVRAM約10.3GiBでした。**従来のRank32/Alpha32・AdamW・cosine設定でも300STEPの動作確認済みです（利用者報告、2026-10-21）。** 旧設定の速度・VRAM測定値は、現在の初期値の測定値とは区別しています。生成品質の比較と、現在の初期値での4000STEP完走は未確認です。詳細は開発・検証文書にまとめています。
 
 ## ライセンス・クレジット
 

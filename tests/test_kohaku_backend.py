@@ -37,14 +37,15 @@ class KohakuTests(unittest.TestCase):
         self.env = {'python': 'old/python', 'sd_scripts': 'old/scripts',
                     'kohaku_python': sys.executable, 'kohaku_source': str(self.root / 'Kohaku source')}
 
-    def test_official_defaults_and_cosine_floor_are_exported(self):
+    def test_kohaku_defaults_and_cosine_floor_are_exported(self):
         fresh = self.store.create('official')
         values = knobs(fresh, self.root)
         self.assertEqual((values['DIM'], values['ALPHA']), (32, 32.0))
-        self.assertEqual(values['OPTIMIZER'], 'adamw')
+        self.assertEqual(values['OPTIMIZER'], 'adamw8bit')
+        self.assertEqual(values['MEMORY_OVERRIDES'], {'optim_state': 'gpu', 'fused_step': False})
         self.assertEqual(values['LR'], 1e-4)
         self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
-        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (1500, 100, 0.1))
+        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (4000, 200, 0.1))
         self.assertNotIn('kohaku_lr_min_ratio', training_config(fresh, self.root))
         fresh['settings']['training']['lr_scheduler'] = 'linear'
         self.assertEqual(knobs(fresh, self.root)['SCHEDULE']['min_value'], 0.0)
@@ -59,6 +60,8 @@ class KohakuTests(unittest.TestCase):
         self.store.save(self.p)
         loaded = self.store.load(self.store.directory(self.p) / 'project.json')
         self.assertEqual(loaded['settings']['training']['kohaku_lr_min_ratio'], 0.0)
+        self.assertEqual(loaded['settings']['training']['max_train_steps'], 1500)
+        self.assertEqual(loaded['settings']['training']['save_every_n_steps'], 100)
         self.assertEqual(knobs(loaded, self.root)['SCHEDULE']['min_value'], 0.0)
         info = {'backend': 'kohaku', 'snapshot': original}
         self.assertEqual(resume_differences(loaded, info), [])

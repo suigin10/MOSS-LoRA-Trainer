@@ -7,11 +7,11 @@
 - 確認操作を画像・キャプション確認、学習前チェック、実行設定プレビューに整理。エクスポートは実行・ログへ移動。
 - 設定ガイドを設定値・使い方・モデル指定に絞って簡潔化。
 
-- 新設定（32/32・AdamW・cosine）で300STEPの動作確認を利用者のRTX 4070 12GB実機で確認した旨を記載。
+- 従来の設定（32/32・AdamW・cosine）で300STEPの動作確認を利用者のRTX 4070 12GB実機で確認した旨を記載。
 
 - 旧設定で1500STEP学習完走を利用者のRTX 4070 12GB実機で確認した旨を記載。新しい公式準拠設定の検証状況と区別。
 
-- 新規学習条件をKohaku公式LoRAレシピを参考に、32/32・AdamW・cosine・warmup100・下限10%・1500step・100step保存（STEP数・保存間隔はGUI独自値）・caption dropout0.1へ変更。
+- 新規学習条件をKohaku公式LoRAレシピを参考に、32/32・AdamW8bit・cosine・warmup100・下限10%・4000step・200step保存（Optimizer・保存間隔はGUI独自値）・caption dropout0.1へ変更。
 - cosine下限をGUIで設定可能にし、既存プロジェクトの下限0%とstate再開互換性を保持。
 - 設定ガイド・README・日英UIを更新し、sd-scriptsの開始値と過去の速度測定条件を明記。
 

@@ -63,7 +63,7 @@ sd-scripts の環境要件を優先してください。GUI と学習用 Python 
 
 ## 初期値と変更方法
 
-新規学習はKohaku公式の32/32・AdamW・cosineを使用します。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
+新規学習は32/32・AdamW8bit・cosine、学習上限4000STEP・200STEPごと保存が初期値です。Kohaku公式レシピを参考に、Optimizerは省メモリのAdamW8bit、保存間隔は200STEPにしています。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
 UIの値は保存済みプロジェクトの設定です。更新だけで既存値を公式初期値へ上書きしません。
 キャプション単体の上限は「01モデル」、画像＋テキストの合計上限は「04 VRAM」のKohaku設定です。
 

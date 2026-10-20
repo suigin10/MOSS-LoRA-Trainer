@@ -475,7 +475,7 @@ class App(tk.Tk):
                 resumebar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 12))
                 ttk.Button(resumebar, text=tr('stateから再開・追加学習…'), command=self.resume_dialog).pack(side='left')
                 ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
-                ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値100 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
+                ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値200 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
                 row = 2
             elif group == 'memory':
                 presets = ttk.Frame(page.body)

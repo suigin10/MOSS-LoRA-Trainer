@@ -6,13 +6,13 @@
 | --- | --- | --- |
 | 解像度 / Resolution | 1024 | 1024 |
 | Rank / Alpha | 32 / 32 | 16 / 1 |
-| Optimizer | AdamW | AdamW8bit |
+| Optimizer | AdamW8bit | AdamW8bit |
 | 学習率 / Learning rate | 0.0001 | 0.0001 |
 | Scheduler | cosine | constant |
 | Warmup | 100 steps | 0 |
 | 最小学習率の比率 / Minimum LR ratio | 0.1（初期学習率の10%） | 対象外 |
-| 最大STEP / Total steps | 1500 | 1500 |
-| 保存間隔 / Save interval | 100 steps | 100 steps |
+| 最大STEP / Total steps | 4000 | 1500 |
+| 保存間隔 / Save interval | 200 steps | 100 steps |
 | Caption dropout | 0.1 | 0.05 |
 | 勾配クリップ / Gradient clipping | 1 | 1 |
 | Batch / 勾配累積 / Accumulation | 1 / 1 | 1 / 1 |

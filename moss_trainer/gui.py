@@ -29,6 +29,10 @@ from .telemetry import GpuMonitor
 APP_DIR = Path(__file__).resolve().parent.parent
 
 
+def alpha_text(value):
+    return str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
+
+
 class ScrollPage(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -139,7 +143,7 @@ class ImportDialog(tk.Toplevel):
             m['split_attn'] = True
         t = source['settings']['training']
         limit = f'{t["max_train_steps"]} STEP' if t['max_train_steps'] else tr('{p0} エポック', p0=t['max_train_epochs'])
-        lines = [tr('学習上限: {p0}', p0=limit), tr('学習率: {p0} / Rank: {p1} / Alpha: {p2}', p0=t['learning_rate'], p1=t['network_dim'], p2=t['network_alpha']),
+        lines = [tr('学習上限: {p0}', p0=limit), tr('学習率: {p0} / Rank: {p1} / Alpha: {p2}', p0=t['learning_rate'], p1=t['network_dim'], p2=alpha_text(t['network_alpha'])),
                  tr('出力 LoRA 名: {p0}', p0=t['output_name']), tr('画像サブセット: {p0} 件', p0=len(source['subsets'])), '', tr('モデル・画像パス:')]
         for key in ('pretrained_model_name_or_path', 'text_encoder', 'vae'):
             value = source['settings']['model'][key]
@@ -523,7 +527,7 @@ class App(tk.Tk):
             widget.grid(row=0, column=1, columnspan=2, sticky='ew')
             self.texts[(group, key)] = widget
         else:
-            var = tk.BooleanVar(value=default) if type(default) is bool else tk.StringVar(value=str(default))
+            var = tk.BooleanVar(value=default) if type(default) is bool else tk.StringVar(value=alpha_text(default) if key == 'network_alpha' else str(default))
             self.variables[(group, key)] = var
             if type(default) is bool:
                 widget = ttk.Checkbutton(box, variable=var)
@@ -642,7 +646,8 @@ class App(tk.Tk):
         self.start_button.configure(state='disabled' if self.busy else 'normal')
         self.delete_button.configure(state='disabled' if self.busy else 'normal')
         for (group, key), var in self.variables.items():
-            var.set(project['settings'][group][key])
+            value = project['settings'][group][key]
+            var.set(alpha_text(value) if key == 'network_alpha' else value)
         self.sync_attention()
         for (group, key), widget in self.texts.items():
             widget.delete('1.0', 'end')

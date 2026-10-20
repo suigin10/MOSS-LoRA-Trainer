@@ -2,11 +2,11 @@
 
 ## Kohakuの新規初期値
 
-学習条件は [Kohaku公式のLoRA共通設定](https://github.com/KohakuBlueleaf/KohakuMossTrainer/blob/0c4737e3b8787a7df0f2d28a2972640a5f8522f6/configs/moss/_base/base_lora.py) に合わせています。
+学習条件は [Kohaku公式のLoRA共通設定](https://github.com/KohakuBlueleaf/KohakuMossTrainer/blob/0c4737e3b8787a7df0f2d28a2972640a5f8522f6/configs/moss/_base/base_lora.py) を参考にしています。学習上限1500STEP・保存間隔100STEPは、このGUI独自の開始値です（公式共通設定は4000STEP・500STEP保存）。
 12GB向けのメモリ構成・batch・トークン量は、公式レシピとは分けてこのGUIの開始設定を使用します。
 公式値はすべてのデータでの最適値を保証するものではありません。
 
-Training defaults follow the upstream Kohaku LoRA recipe. Memory, batch size and token budget retain this GUI's 12GB starting configuration.
+Training defaults follow the upstream Kohaku LoRA recipe, with GUI-specific limits of 1500 total steps and saves every 100 steps (upstream: 4000 / 500). Memory, batch size and token budget retain this GUI's 12GB starting configuration.
 
 | 項目 / Setting | Kohaku新規初期値 | sd-scriptsの開始目安（手動で設定） |
 | --- | --- | --- |
@@ -16,8 +16,8 @@ Training defaults follow the upstream Kohaku LoRA recipe. Memory, batch size and
 | 学習率 / Learning rate | 1e-4 | 1e-4 |
 | Scheduler / Warmup | cosine / 100 steps | constant / 0 |
 | 最小学習率 / Minimum LR | 初期値の10%（1e-5） | constantのため固定1e-4 |
-| 学習上限 / Total steps | 4000 | 1500（対象に応じて調整） |
-| 保存間隔 / Save interval | 500 steps | 100 steps |
+| 学習上限 / Total steps | 1500 | 1500（対象に応じて調整） |
+| 保存間隔 / Save interval | 100 steps | 100 steps |
 | Caption dropout | 0.1 | 0.05 |
 | 勾配クリップ / Gradient clipping | 1 | 1 |
 | Batch / 勾配累積 / Accumulation | 1 / 1 | 1 / 1 |

@@ -44,7 +44,7 @@ class KohakuTests(unittest.TestCase):
         self.assertEqual(values['OPTIMIZER'], 'adamw')
         self.assertEqual(values['LR'], 1e-4)
         self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
-        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (4000, 500, 0.1))
+        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (1500, 100, 0.1))
         self.assertNotIn('kohaku_lr_min_ratio', training_config(fresh, self.root))
         fresh['settings']['training']['lr_scheduler'] = 'linear'
         self.assertEqual(knobs(fresh, self.root)['SCHEDULE']['min_value'], 0.0)

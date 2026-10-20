@@ -24,7 +24,8 @@ CUDA / bf16対応のNVIDIA GPUが対象です。Kohakuの導入には対応ド�
 
 ## 新規学習の初期値
 
-Kohakuの学習条件は公式LoRAレシピに合わせ、**Rank/Alpha 32/32、AdamW、LR 1e-4、cosine、warmup 100、最小学習率10%、4000step、500stepごと保存、caption dropout 0.1**を使用します。
+Kohakuの学習条件は公式LoRAレシピを参考に、**Rank/Alpha 32/32、AdamW、LR 1e-4、cosine、warmup 100、最小学習率10%、1500step、100stepごと保存、caption dropout 0.1**を使用します。
+学習上限1500step・保存間隔100stepは、使いやすさを優先したこのGUI独自の初期値です（公式共通設定は4000step・500step保存）。
 INT8・ckpt-resident・batch 1・画像＋テキスト上限6144は、このGUIの12GB向け開始設定です。
 
 既存プロジェクトとstateの保存設定は維持します。旧cosineの最小学習率は従来の0%を保持します。

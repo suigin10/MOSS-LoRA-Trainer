@@ -22,6 +22,46 @@ class GuiTests(unittest.TestCase):
         self.addCleanup(self.app.destroy)
         self.app.update()
 
+    def test_preflight_does_not_repeat_dataset_details(self):
+        with patch('moss_trainer.gui.validate', return_value=[]), \
+             patch('moss_trainer.gui.dataset_report', side_effect=AssertionError('dataset details belong in their own action')), \
+             patch.object(self.app, 'show_text') as show:
+            self.app.check()
+        self.assertEqual(show.call_args.args[0], '学習前チェック')
+        self.assertIn('sd-scripts', show.call_args.args[1])
+
+    def test_kohaku_preview_only_shows_kohaku_launch_config(self):
+        self.app.variables[('memory', 'backend')].set('kohaku')
+        with patch.object(self.app, 'show_text') as show:
+            self.app.preview()
+        text = show.call_args.args[1]
+        self.assertIn('Kohaku', text)
+        self.assertIn('# kohaku_train.py', text)
+        self.assertNotIn('# train.toml', text)
+        self.assertNotIn('--config_file', text)
+
+    def test_kohaku_export_writes_launch_files_and_restore_snapshot(self):
+        import json
+        images = Path(self.temp.name) / 'images'
+        images.mkdir()
+        (images / 'cat.png').write_bytes(b'fixture')
+        (images / 'cat.txt').write_text('a cat', encoding='utf-8')
+        project = self.app.collect()
+        project['settings'] = defaults()
+        project['subsets'] = [{'image_dir': str(images), 'num_repeats': 1, 'class_tokens': ''}]
+        self.app.load_project(project)
+        with patch('moss_trainer.gui.filedialog.askdirectory', return_value=self.temp.name), \
+             patch.object(self.app, 'show_text') as show:
+            self.app.export()
+        folders = list(Path(self.temp.name).glob('moss_config_*'))
+        self.assertEqual(len(folders), 1)
+        folder = folders[0]
+        self.assertTrue((folder / 'kohaku_train.py').is_file())
+        self.assertFalse((folder / 'train.toml').exists())
+        self.assertFalse((folder / 'dataset.toml').exists())
+        self.assertEqual(json.loads((folder / 'project_snapshot.json').read_text(encoding='utf-8'))['settings']['memory']['backend'], 'kohaku')
+        self.assertIn('Kohaku', show.call_args.args[1])
+
     def test_startup_and_preset_controls(self):
         self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
         self.app.set_preset('24GB+')

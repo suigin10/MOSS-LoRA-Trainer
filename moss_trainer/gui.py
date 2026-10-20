@@ -506,8 +506,7 @@ class App(tk.Tk):
         self.start_button.pack(side='right', padx=(8, 0))
         self.stop_button = ttk.Button(actions, text=tr('■ 停止'), command=self.stop, state='disabled')
         self.stop_button.pack(side='right', padx=8)
-        ttk.Button(actions, text=tr('設定を書き出す'), command=self.export).pack(side='right', padx=4)
-        ttk.Button(actions, text=tr('設定を確認'), command=self.check).pack(side='right', padx=4)
+        ttk.Button(actions, text=tr('学習前チェック'), command=self.check).pack(side='right', padx=4)
         decorate_icons(self)
 
     def field(self, parent, group, key, spec, row):
@@ -555,7 +554,7 @@ class App(tk.Tk):
         controls = ttk.Frame(panel)
         controls.grid(row=2, column=0, sticky='ew', pady=(8, 0))
         ttk.Button(controls, text=tr('＋ サブセット追加'), command=lambda: self.add_subset()).pack(side='left')
-        ttk.Button(controls, text=tr('画像数・Caption数を確認'), command=self.scan_dataset).pack(side='left', padx=8)
+        ttk.Button(controls, text=tr('画像・キャプションを確認'), command=self.scan_dataset).pack(side='left', padx=8)
         return 1
 
     def add_subset(self, sub=None):
@@ -586,10 +585,11 @@ class App(tk.Tk):
         self.notebook.add(page, text=tr('実行・ログ'))
         buttons = ttk.Frame(page)
         buttons.pack(fill='x', pady=(0, 10))
-        ttk.Button(buttons, text=tr('現在の設定をプレビュー'), command=self.preview).pack(side='left')
+        ttk.Button(buttons, text=tr('実行設定のプレビュー'), command=self.preview).pack(side='left')
+        ttk.Button(buttons, text=tr('設定をエクスポート'), command=self.export).pack(side='left', padx=8)
         ttk.Button(buttons, text=tr('最新の実行フォルダ'), command=self.open_run).pack(side='left', padx=8)
         ttk.Button(buttons, text=tr('実行履歴'), command=self.history).pack(side='left')
-        ttk.Label(buttons, text=tr('実行ごとに設定・モデル・ログを別フォルダに保存'), style='Hint.TLabel').pack(side='right')
+        ttk.Label(page, text=tr('プレビューは起動コマンドと学習設定を表示、エクスポートは設定ファイルを保存します。'), style='Hint.TLabel').pack(anchor='w', pady=(0, 8))
         alerts = ttk.Frame(page)
         alerts.pack(fill='x', pady=(0, 8))
         ttk.Checkbutton(alerts, text=tr('学習終了時に通知音（完了・失敗）'), variable=self.sound_enabled, command=self.save_ui_preferences).pack(side='left')
@@ -1062,7 +1062,7 @@ class App(tk.Tk):
 
     def scan_dataset(self):
         try:
-            self.show_text(tr('データセットの確認'), dataset_report(self.collect()))
+            self.show_text(tr('画像・キャプションの確認'), dataset_report(self.collect()))
         except (ValueError, OSError) as exc:
             messagebox.showerror(tr('データセット'), str(exc), parent=self)
 
@@ -1070,9 +1070,12 @@ class App(tk.Tk):
         try:
             project = self.collect()
             errors = validate(project, self.env, files=True)
-            self.show_text(tr('設定の確認'), (tr('次の項目を修正してください:\n\n') + '\n'.join('• ' + e for e in errors) if errors else tr('ファイルパスと設定の整合性: OK\nCUDA / ライブラリは実行環境のチェックで確認できます。')) + '\n\n' + dataset_report(project))
+            engine = 'Kohaku' if backend(project['settings']) == 'kohaku' else 'sd-scripts'
+            result = (tr('次の項目を修正してください:\n\n') + '\n'.join('• ' + e for e in errors)
+                      if errors else tr('ファイルパスと設定の整合性: OK\nCUDA / ライブラリは実行環境のチェックで確認できます。'))
+            self.show_text(tr('学習前チェック'), tr('学習エンジン: {p0}', p0=engine) + '\n\n' + result)
         except (ValueError, OSError) as exc:
-            messagebox.showerror(tr('設定の確認'), str(exc), parent=self)
+            messagebox.showerror(tr('学習前チェック'), str(exc), parent=self)
 
     def preview(self):
         try:
@@ -1087,7 +1090,7 @@ class App(tk.Tk):
                 text += '\n# dataset.toml\n' + dataset_config(p)
                 if p['settings']['samples']['enabled']:
                     text += '\n# sample_prompts.txt\n' + sample_prompts_text(p['settings'])
-            self.show_text(tr('学習設定のプレビュー'), text)
+            self.show_text(tr('実行設定のプレビュー'), tr('学習エンジン: {p0}', p0='Kohaku' if backend(p['settings']) == 'kohaku' else 'sd-scripts') + '\n\n' + text)
         except (ValueError, OSError) as exc:
             messagebox.showerror(tr('プレビュー'), str(exc), parent=self)
 
@@ -1101,9 +1104,9 @@ class App(tk.Tk):
             if target:
                 folder = Path(target) / ('moss_config_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:6])
                 write_run(p, self.env, folder)
-                self.show_text(tr('設定を書き出しました'), str(folder) + tr('\n\n再度読み込む場合は「設定を読み込む」で、このフォルダの project_snapshot.json を選んでください。\n\n') + subprocess.list2cmdline(command(self.env, folder, p['settings'])))
+                self.show_text(tr('設定のエクスポート'), tr('学習エンジン: {p0}', p0='Kohaku' if backend(p['settings']) == 'kohaku' else 'sd-scripts') + '\n\n' + str(folder) + tr('\n\n再度読み込む場合は「設定を読み込む」で、このフォルダの project_snapshot.json を選んでください。\n\n') + subprocess.list2cmdline(command(self.env, folder, p['settings'])))
         except (ValueError, OSError) as exc:
-            messagebox.showerror(tr('設定の書き出し'), str(exc), parent=self)
+            messagebox.showerror(tr('設定のエクスポート'), str(exc), parent=self)
 
     def import_settings(self):
         if self.busy:

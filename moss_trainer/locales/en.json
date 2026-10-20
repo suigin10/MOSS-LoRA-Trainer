@@ -470,5 +470,13 @@
   "sd-scripts、またはKohakuのconstantでは総上限を増やして追加学習できます。Kohakuのcosine等では元の総上限を維持してください。": "You can extend the total limit with sd-scripts or Kohaku constant. With Kohaku cosine and other schedules, keep the original total limit.",
   "このGUIの開始値1500。画像数・学習対象に応じて調整": "This GUI starts at 1500 steps. Adjust for the dataset and training subject.",
   "このGUIの初期値100。LoRAと再開用stateを保存する間隔": "This GUI defaults to 100 steps between LoRA and resume-state saves.",
-  "stateもLoRAと同じ保存間隔（新規初期値100 steps）": "Save state with LoRA (new-project default: every 100 steps)"
+  "stateもLoRAと同じ保存間隔（新規初期値100 steps）": "Save state with LoRA (new-project default: every 100 steps)",
+  "学習前チェック": "Preflight check",
+  "画像・キャプションを確認": "Check images / captions",
+  "画像・キャプションの確認": "Image / caption check",
+  "実行設定のプレビュー": "Preview launch settings",
+  "設定をエクスポート": "Export settings",
+  "設定のエクスポート": "Settings export",
+  "プレビューは起動コマンドと学習設定を表示、エクスポートは設定ファイルを保存します。": "Preview shows the launch command and training configuration; export saves configuration files.",
+  "学習エンジン: {p0}": "Training engine: {p0}"
 }

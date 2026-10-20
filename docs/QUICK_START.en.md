@@ -1,10 +1,10 @@
-# MOSS Studio with Kohaku v0.2.0
+# MOSS Studio with Kohaku v0.2.1
 
 Version 0.2.0 adds automatic Triton installation and a separate Kohaku backend. Open **Start MOSS Studio.bat**, select English, then use **Easy Setup**. Choose sd-scripts (cu128/torch 2.8 or cu124/torch 2.6) or Kohaku (cu130/torch 2.13). Kohaku requires a compatible NVIDIA driver and Visual Studio C++ Build Tools. Select the installed engine in **04 VRAM / Speed** before starting training.
 
 Triton is paired with the selected PyTorch version and checked by compiling and executing a small GPU kernel. The GUI and existing global Python environments are not used for backend installation.
 
-Kohaku training and resume have been tested with real model weights on an RTX 4070 12GB. The user confirmed a completed 1500-step training run with the previous settings on their own RTX 4070 12GB (reported 2026-10-21). A 100-step run and a 50-step continuation were also confirmed. A short INT8 / ckpt-resident benchmark measured about 4.10 s/step and 10.3 GiB device VRAM. Clean dependency installation and generated-image quality comparisons remain unverified. Existing sd-scripts projects keep their original backend.
+Kohaku training and resume have been tested with real model weights on an RTX 4070 12GB. The user confirmed a completed 1500-step training run with the previous settings on their own RTX 4070 12GB (reported 2026-10-21). A 100-step run and a 50-step continuation were also confirmed. The user also confirmed 300 steps of operation with the new rank32/alpha32, AdamW and cosine settings on the same GPU (reported 2026-10-21). A short INT8 / ckpt-resident benchmark measured about 4.10 s/step and 10.3 GiB device VRAM. Clean dependency installation and generated-image quality comparisons remain unverified. Existing sd-scripts projects keep their original backend.
 
 Kohaku uses KohakuMoss License 1.0, based on Apache-2.0 with an additional naming condition. The primary product branding is **MOSS Studio with Kohaku**. See the full license in `licenses/KohakuMoss-LICENSE.txt` and the Japanese integration guide [USER_GUIDE.ja.md#kohakuバックエンド](USER_GUIDE.ja.md#kohakuバックエンド).
 
@@ -16,7 +16,7 @@ The following guide describes the existing sd-scripts workflow:
 
 # MOSS Studio — English quick start
 
-This is the **v0.2.0 release**, adding elapsed time, measured average s/it, device-wide VRAM monitoring, editable CPU processing threads (default 2), a 12GB swap-16 preset and console-free GUI startup. The provider has confirmed operation through version 0.1.1 and previously verified training on an RTX 4070 (12 GB VRAM). Automated tests and monitoring checks are described in the [validation notes](../CONTRIBUTING.md#検証状況); see the development notes for automated tests, GPU benchmarks and remaining limitations.
+This is the **v0.2.1 release**, adding elapsed time, measured average s/it, device-wide VRAM monitoring, editable CPU processing threads (default 2), a 12GB swap-16 preset and console-free GUI startup. The provider has confirmed operation through version 0.1.1 and previously verified training on an RTX 4070 (12 GB VRAM). Automated tests and monitoring checks are described in the [validation notes](../CONTRIBUTING.md#検証状況); see the development notes for automated tests, GPU benchmarks and remaining limitations.
 
 ## Install and launch
 
@@ -61,3 +61,5 @@ The new monitor uses nvidia-smi every ~3 seconds; device-wide memory includes ot
 CPU processing threads are editable in 04 VRAM / Speed (default 2; positive integer). More threads may not be faster. This is separate from DataLoader workers and requires no extra installation. Project copies and exported settings retain the value; older projects with no saved value default to 2. Existing saved values are preserved.
 
 The batch launchers detach the GUI without retaining a console window. An existing terminal used to invoke a launcher stays open. Startup failures are shown in a dialog and appended to data/startup.log (or MOSS_TRAINER_DATA). Use python launch.py for console diagnostics.
+
+Preflight check validates paths and settings. Use Check images / captions in the Dataset tab for dataset details. Preview launch settings and Export settings are together in Run / Log.

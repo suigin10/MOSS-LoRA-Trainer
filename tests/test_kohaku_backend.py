@@ -68,6 +68,19 @@ class KohakuTests(unittest.TestCase):
         again = self.store.create('legacy-copy', source=loaded)
         self.assertEqual(again['settings']['training']['kohaku_lr_min_ratio'], 0.0)
 
+    def test_sd_scripts_only_validation_does_not_block_kohaku(self):
+        p = copy.deepcopy(self.p)
+        p['settings']['memory'].update(blocks_to_swap=99, cpu_offload_checkpointing=True,
+                                     unsloth_offload_checkpointing=True, attn_mode='xformers', split_attn=False,
+                                     max_data_loader_n_workers=0, persistent_data_loader_workers=True)
+        p['settings']['dataset'].update(bucket_reso_steps=3, min_bucket_reso=32, max_bucket_reso=16)
+        self.assertEqual(validate(p), [])
+        values = knobs(p, self.root)
+        self.assertNotIn('blocks_to_swap', values)
+        self.assertNotIn('attn_mode', values)
+        p['settings']['memory']['backend'] = 'sd-scripts'
+        self.assertTrue(validate(p))
+
     def test_old_projects_and_environment_keep_sd_scripts(self):
         old = copy.deepcopy(self.p)
         del old['settings']['memory']['backend']

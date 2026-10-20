@@ -22,8 +22,9 @@ def load(app):
 def decorate(app):
     buttons = {
         tr('▶ 学習を開始'): 'play', tr('■ 停止'): 'stop', tr('＋ 追加 / コピー'): 'plus',
-        tr('削除'): 'trash', tr('設定を読み込む'): 'import', tr('設定を書き出す'): 'export',
-        tr('設定を保存'): 'save', tr('保存先を開く'): 'folder', tr('設定を確認'): 'check',
+        tr('削除'): 'trash', tr('設定を読み込む'): 'import', tr('設定をエクスポート'): 'export',
+        tr('設定を保存'): 'save', tr('保存先を開く'): 'folder', tr('学習前チェック'): 'check',
+        tr('実行設定のプレビュー'): 'settings', tr('画像・キャプションを確認'): 'folder',
         tr('実行環境'): 'settings', tr('かんたん導入'): 'install',
     }
     def visit(widget):

@@ -262,11 +262,13 @@ def validate(project, env=None, files=False):
     if errors:
         return errors
     d, t, m, f = (s[k] for k in ('dataset', 'training', 'memory', 'flow'))
-    for key in ('resolution', 'bucket_reso_steps', 'min_bucket_reso', 'max_bucket_reso'):
+    is_sd_scripts = backend(s) == 'sd-scripts'
+    for key in (('resolution', 'bucket_reso_steps', 'min_bucket_reso', 'max_bucket_reso') if is_sd_scripts else ('resolution',)):
         require(d[key] >= 16 and d[key] % 16 == 0, tr('{p0}: 16 以上の 16 の倍数にしてください', p0=key))
-    require(d['min_bucket_reso'] <= d['max_bucket_reso'], tr('Bucket 最小値は最大値以下にしてください'))
-    for key in ('min_bucket_reso', 'max_bucket_reso'):
-        require(d[key] % d['bucket_reso_steps'] == 0, tr('{p0}: Bucket 刻みの倍数にしてください', p0=key))
+    if is_sd_scripts:
+        require(d['min_bucket_reso'] <= d['max_bucket_reso'], tr('Bucket 最小値は最大値以下にしてください'))
+        for key in ('min_bucket_reso', 'max_bucket_reso'):
+            require(d[key] % d['bucket_reso_steps'] == 0, tr('{p0}: Bucket 刻みの倍数にしてください', p0=key))
     require(d['batch_size'] >= 1, tr('バッチサイズは 1 以上にしてください'))
     require(1 <= s['model']['moss_max_token_length'] <= 4096, tr('最大トークン数は 1〜4096 にしてください'))
     for key in ('network_dim', 'network_alpha', 'learning_rate', 'max_train_epochs', 'gradient_accumulation_steps'):
@@ -278,17 +280,19 @@ def validate(project, env=None, files=False):
     require(d['caption_extension'].startswith('.') and not re.search(r'[/\\\s]', d['caption_extension']), tr('キャプション拡張子は .txt の形式で入力してください'))
     for group, key in (('training', 'kohaku_lr_min_ratio'), ('dataset', 'caption_dropout_rate'), ('flow', 'rank_dropout'), ('flow', 'module_dropout')):
         require(0 <= s[group][key] <= 1, tr('{p0}: 0〜1 にしてください', p0=key))
-    require(0 <= m['blocks_to_swap'] <= 40, tr('Block swap は 0〜40 にしてください'))
-    modes = sum([m['blocks_to_swap'] > 0, m['cpu_offload_checkpointing'], m['unsloth_offload_checkpointing']])
-    require(modes <= 1, tr('Block swap / CPU offload / Unsloth はいずれか 1 つだけ選んでください'))
+    if is_sd_scripts:
+        require(0 <= m['blocks_to_swap'] <= 40, tr('Block swap は 0〜40 にしてください'))
+        modes = sum([m['blocks_to_swap'] > 0, m['cpu_offload_checkpointing'], m['unsloth_offload_checkpointing']])
+        require(modes <= 1, tr('Block swap / CPU offload / Unsloth はいずれか 1 つだけ選んでください'))
     require(not (m['cache_latents_to_disk'] and not m['cache_latents']), tr('ディスク Latent キャッシュには Latent キャッシュを ON にしてください'))
     require(not (m['cache_text_encoder_outputs_to_disk'] and not m['cache_text_encoder_outputs']), tr('ディスク TE キャッシュにはテキスト出力キャッシュを ON にしてください'))
     require(not (m['cache_latents'] and (d['color_aug'] or d['random_crop'])), tr('Latent キャッシュと色拡張 / ランダムクロップは併用できません'))
     require(not (m['cache_text_encoder_outputs'] and d['shuffle_caption']), tr('TE キャッシュとキャプションシャッフルは併用できません'))
     require(m['max_data_loader_n_workers'] >= 0, tr('DataLoader workers は 0 以上にしてください'))
     require(m['num_cpu_threads_per_process'] >= 1, tr('CPU処理スレッド数は1以上の整数にしてください'))
-    require(not (m['max_data_loader_n_workers'] == 0 and m['persistent_data_loader_workers']), tr('workers=0 の場合は worker 維持を OFF にしてください'))
-    require(m['attn_mode'] != 'xformers' or m['split_attn'], tr('xformers には Split attention が必要です'))
+    if is_sd_scripts:
+        require(not (m['max_data_loader_n_workers'] == 0 and m['persistent_data_loader_workers']), tr('workers=0 の場合は worker 維持を OFF にしてください'))
+        require(m['attn_mode'] != 'xformers' or m['split_attn'], tr('xformers には Split attention が必要です'))
     for key in ('logit_std', 'discrete_flow_shift', 'sigmoid_scale', 'mode_scale', 'embedder_lr'):
         require(f[key] > 0, tr('{p0}: 0 より大きい値が必要です', p0=key))
     for key in ('exclude_patterns', 'include_patterns'):

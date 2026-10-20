@@ -1,4 +1,4 @@
-# MOSS Studio with Kohaku v0.2.0
+# MOSS Studio with Kohaku v0.2.1
 
 Windows向けのMOSS-Image LoRA学習GUIです。Kohaku / sd-scriptsの専用環境導入、プロジェクト管理、キャッシュ、学習・追加学習、ログ表示に対応します。新規プロジェクトはKohakuを使用します。既存プロジェクトのエンジンと保存設定は維持します。
 
@@ -14,13 +14,14 @@ CUDA / bf16対応のNVIDIA GPUが対象です。Kohakuの導入には対応ド�
 
 ## ドキュメント
 
-- [設定・モデルガイド](docs/STABLE_SETTINGS.md): 12GB向けKohaku / sd-scripts設定表、VRAMプリセット、モデルのファイル名とダウンロード先。
+- [設定ガイド](docs/STABLE_SETTINGS.md): 12GB向けKohaku / sd-scripts設定表、VRAMプリセット、モデルのファイル名とダウンロード先。
 - [利用ガイド](docs/USER_GUIDE.ja.md): 導入、プロジェクト、キャプション、学習・再開、出力形式、Kohaku固有の対応範囲。
 - [English quick start](docs/QUICK_START.en.md)
 - [開発・検証](CONTRIBUTING.md): テスト方法、不具合報告、実機検証結果と未確認項目。
 - [変更履歴](CHANGELOG.md)
 
 設定表は「04 VRAM・速度」の「設定ガイド」ボタンからも開けます。
+「学習前チェック」はパスと設定の不整合を検査します。画像・キャプションの詳細はデータセットタブ、実行設定のプレビューと設定エクスポートは「実行・ログ」にあります。
 
 ## 新規学習の初期値
 
@@ -43,7 +44,7 @@ Kohakuとsd-scriptsのstateは相互利用できません。更新時はアプ�
 
 ## 現在の確認状況
 
-**旧設定で1500STEPの学習完走を、利用者のRTX 4070 12GB実機で確認済みです（2026-10-21報告）。** 100STEP学習と50STEP追加学習も確認済みです。旧設定（Rank16/Alpha1・AdamW8bit・constant、INT8・ckpt-resident）の短期診断は約4.10秒/step、デバイスVRAM約10.3GiBでした。新しい公式準拠の学習条件では未測定です。生成品質の比較と、新しい公式準拠設定での長時間完走は未確認です。詳細は開発・検証文書にまとめています。
+**旧設定で1500STEPの学習完走を、利用者のRTX 4070 12GB実機で確認済みです（2026-10-21報告）。** 100STEP学習と50STEP追加学習も確認済みです。旧設定（Rank16/Alpha1・AdamW8bit・constant、INT8・ckpt-resident）の短期診断は約4.10秒/step、デバイスVRAM約10.3GiBでした。**新設定（Rank32/Alpha32・AdamW・cosine）でも300STEPの動作確認済みです（利用者報告、2026-10-21）。** 旧設定の速度・VRAM測定値は、新設定の測定値とは区別しています。生成品質の比較と、新しい公式準拠設定での長時間完走は未確認です。詳細は開発・検証文書にまとめています。
 
 ## ライセンス・クレジット
 

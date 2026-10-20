@@ -108,7 +108,7 @@ class EnglishGuiTests(unittest.TestCase):
         with patch.object(self.app, 'show_text') as report:
             self.app.check()
         title, text = report.call_args.args
-        self.assertEqual(title, 'Check settings')
+        self.assertEqual(title, 'Preflight check')
         self.assertIn('Batch size must be at least 1.', text)
         self.assertFalse(JAPANESE.search(text))
         self.app.operation = 'training'

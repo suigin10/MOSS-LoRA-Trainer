@@ -123,7 +123,8 @@ def knobs(project, run_dir):
         'SAMPLE_PROMPTS': [p.strip() for p in sample['prompts'].splitlines() if p.strip() and not p.strip().startswith('#')] if sample['enabled'] else [],
         'SAMPLE_NEGATIVE': sample['negative_prompt'], 'SAMPLE_STEPS': sample['infer_steps'],
         'SAMPLE_CFG': sample['cfg'], 'SAMPLE_SHIFT': sample['flow_shift'],
-        'SAMPLE_SIZE': (sample['width'], sample['height']), 'SAMPLE_SEEDS': (sample['sample_seed'],),
+        # Kohaku's sampling API takes (height, width), unlike the GUI fields.
+        'SAMPLE_SIZE': (sample['height'], sample['width']), 'SAMPLE_SEEDS': (sample['sample_seed'],),
         'SAMPLE_SKIP_LAYERS': tuple(int(x) for x in sample['sample_uncond_skip_layers'].split(',') if x.strip()),
         'SAVE_EVERY': t['save_every_n_steps'] if t['save_state'] else 0,
         'KEEP_LAST': 1 if t['keep_latest_state_only'] else 0,

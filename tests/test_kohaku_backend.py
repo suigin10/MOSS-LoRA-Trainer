@@ -117,6 +117,21 @@ class KohakuTests(unittest.TestCase):
         self.assertFalse((run / 'train.toml').exists())
         self.assertIn('kohaku_python', json.loads((run / 'environment_snapshot.json').read_text()))
 
+    def test_rectangular_samples_export_in_kohaku_height_width_order(self):
+        from moss_trainer.core import sample_prompts_text
+        for width, height in ((768, 1024), (1024, 768)):
+            with self.subTest(width=width, height=height):
+                self.p['settings']['samples'].update(enabled=True, width=width, height=height)
+                run = self.root / f'sample_{width}_{height}'
+                write_run(self.p, self.env, run)
+                config = runpy.run_path(str(run / 'kohaku_train.py'))
+                self.assertEqual(config['SAMPLE_SIZE'], (height, width))
+                snapshot = json.loads((run / 'project_snapshot.json').read_text())
+                self.assertEqual(snapshot['settings']['samples']['width'], width)
+                self.assertEqual(snapshot['settings']['samples']['height'], height)
+                prompt = sample_prompts_text(self.p['settings'])
+                self.assertIn(f'--w {width} --h {height}', prompt)
+
     def test_caption_extension_single_line_and_fallback(self):
         d = self.p['settings']['dataset']
         d.update(caption_extension='.caption', enable_multiline_caption=False)

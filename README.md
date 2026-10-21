@@ -44,7 +44,9 @@ Kohakuとsd-scriptsのstateは相互利用できません。更新時はアプ�
 
 ## 現在の確認状況
 
-**利用者のRTX 4070 12GB実機で、Kohaku（旧設定・新設定）とsd-scriptsの両バックエンドで1500STEPの学習完走を確認済みです（2026-10-21報告）。** 100STEP学習と50STEP追加学習も確認済みです。旧設定（Rank16/Alpha1・AdamW8bit・constant、INT8・ckpt-resident）の短期診断は約4.10秒/step、デバイスVRAM約10.3GiBでした。この速度・VRAM測定値は、現在の初期値の測定値とは区別しています。生成品質の比較と、現在の初期値での4000STEP完走は未確認です。詳細は開発・検証文書にまとめています。
+**利用者のRTX 4070 12GB実機で、Kohakuの4000STEP学習完走・サンプル生成・最終LoRA出力を確認済みです（2026-10-21報告）。** 実行条件はRank/Alpha 32/32・AdamW8bit・cosine・ckpt-resident・auto・画像＋テキスト上限6144・200STEPごと保存で、現在の学習初期値と一致しています。サンプル生成ON（250STEPごと）で、学習平均**4.35秒/STEP**、総所要時間**4時間51分24秒**（準備・保存込み）、GPU全体の専用VRAM観測最大**11.3GiB / 12GiB**でした。サンプル生成は新規プロジェクトでは初期OFFです。
+
+Kohaku（旧設定・新設定）とsd-scriptsでは1500STEPの学習完走、100STEP学習と50STEP追加学習も確認済みです。旧設定（Rank16/Alpha1・AdamW8bit・constant、INT8・ckpt-resident）の約4.10秒/STEP・デバイスVRAM約10.3GiBは、別条件の短期診断値です。生成品質の比較は未実施です。詳細は開発・検証文書にまとめています。
 
 ## ライセンス・クレジット
 

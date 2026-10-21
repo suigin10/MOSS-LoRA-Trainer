@@ -26,11 +26,13 @@ GPU学習の完走結果は歓迎します。成功条件・モデル・設定�
 確認日: 2026-10-21。Windows / Python 3.12 / RTX 4070 12GB。
 
 - resident初期値の変更後、自動テスト146件成功。設定ガイドをMarkdownへ移した後、GUI・翻訳8件とガイドボタンの読み込みを再確認。
+- 利用者のRTX 4070 12GB実機で、Kohakuの4000STEP学習完走・サンプル生成・最終LoRA出力を確認（2026-10-21報告）。実行スナップショットは32/32・AdamW8bit・LR 1e-4・cosine・4000STEP・200STEPごと保存・ckpt-resident・auto・画像＋テキスト上限6144。サンプル生成ON（250STEPごと）。status.jsonはcompleted・returncode 0。
+- 上記4000STEP実行のGUI表示値は学習平均4.35秒/STEP、総所要4時間51分24秒（準備・保存込み）、GPU全体の専用VRAM観測最大11.3GiB / 12GiB。新規プロジェクトのサンプル生成は初期OFF。
 - 利用者のRTX 4070 12GB実機で、Kohaku（旧設定・新設定）とsd-scriptsの両バックエンドで1500STEPの学習完走を確認（2026-10-21報告）。100STEP学習と50STEP追加学習も成功。
 - INT8・AdamW8bit・auto精度の各12STEP診断で、従来構成4.518秒/step、ckpt-resident4.102秒/step。residentのデバイスVRAMは約10.3GiB。lossは有限。
 - 実際の150STEP checkpointからresidentで153STEPまで再開成功。
 - FP8比較は3.370秒/stepだったが生成品質は未比較。標準設定には採用しない。
-- 現在の初期値（32/32・AdamW8bit・cosine・4000STEP）での長時間完走、新規専用venvへのネット経由導入完走、最終的な生成品質比較は未確認。
+- 新規専用venvへのネット経由導入完走、最終的な生成品質比較は未確認。
 
 自動テストとGPU実機診断は別の確認です。導入・失敗時の登録防止などにはモックを使用しています。
 各値は同じ実データでの短期測定であり、他の画像やキャプション・GPUの速度を保証しません。

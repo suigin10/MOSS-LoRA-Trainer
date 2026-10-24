@@ -18,7 +18,7 @@ def main():
     cache = snapshot['settings']['model']['tokenizer_cache_dir']
     if cache:
         env['HF_HOME'] = cache
-    kogine = Path(sys.executable).with_name('kogine.exe' if os.name == 'nt' else 'kogine')
+    cache_entry = Path(__file__).with_name('kohaku_vault_compat.py')
     stages = [('scripts/data/cache_text.py', 'kohaku_data.py'),
               ('scripts/data/cache_latents.py', 'kohaku_data.py')]
     # Validate training knobs before spending time building caches.
@@ -26,7 +26,7 @@ def main():
     subprocess.run([str(config_cli), 'check', str(run_dir / 'kohaku_train.py')], cwd=source, env=env, check=True)
     for script, config in stages:
         print('\n=== Kohaku: ' + script + ' ===', flush=True)
-        subprocess.run([str(kogine), 'run', str(source / script), '--config', str(run_dir / config)],
+        subprocess.run([sys.executable, str(cache_entry), 'run', str(source / script), '--config', str(run_dir / config)],
                        cwd=source, env=env, check=True)
     print('\n=== Kohaku: training ===', flush=True)
     subprocess.run([sys.executable, '-u', str(Path(__file__).with_name('kohaku_train_entry.py')),

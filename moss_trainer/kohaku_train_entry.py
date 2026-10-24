@@ -35,6 +35,11 @@ def archive_exports(run_dir, output_name):
 
 
 def main():
+    if __package__:
+        from .kohaku_vault_compat import apply
+    else:
+        from kohaku_vault_compat import apply
+    apply()
     source, run_dir = (Path(p).resolve() for p in sys.argv[1:3])
     snapshot = json.loads((run_dir / 'project_snapshot.json').read_text(encoding='utf-8'))
     name = snapshot['settings']['training']['output_name']

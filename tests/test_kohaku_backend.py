@@ -351,6 +351,8 @@ class KohakuTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 kohaku_bridge.main()
         self.assertEqual(child.call_count, 2)  # validate + text cache; no latents/training
+        self.assertEqual(child.call_args_list[1].args[0][0], sys.executable)
+        self.assertTrue(child.call_args_list[1].args[0][1].endswith('kohaku_vault_compat.py'))
         self.assertTrue(all(call.kwargs['check'] for call in child.call_args_list))
 
     def test_triton_package_is_paired_with_torch_and_executes_a_kernel_test(self):
@@ -411,7 +413,8 @@ class KohakuTests(unittest.TestCase):
         self.assertEqual((data / 'environment.json').read_text(), before)
         self.assertEqual(json.loads((self.root / 'backend/kohaku-env/installation.json').read_text())['status'], 'failed')
 
-    def test_training_entry_overlays_settings_and_archives_before_pruning(self):
+    @patch('moss_trainer.kohaku_vault_compat.apply')
+    def test_training_entry_overlays_settings_and_archives_before_pruning(self, vault_compat):
         from moss_trainer import kohaku_train_entry as entry
         (self.root / 'project_snapshot.json').write_text(json.dumps(self.p), encoding='utf-8')
         export = self.root / 'kohaku/checkpoints/step_00000025/export'
@@ -432,6 +435,7 @@ class KohakuTests(unittest.TestCase):
              patch.object(sys, 'argv', ['entry', str(self.root / 'source'), str(self.root)]), \
              patch.object(entry.runpy, 'run_path', side_effect=[{'run': run, 'STEPS': 1000}, {'STEPS': 1500}]):
             entry.main()
+        vault_compat.assert_called_once_with()
         self.assertEqual(seen, [1500])
         self.assertIs(Manager.prune, original)
 

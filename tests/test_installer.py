@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
 
-from moss_trainer.installer import download, extract_source, install, resolve_base_python, run
+from moss_trainer.installer import download, extract_source, install, resolve_base_python, run, install_attention, validate_attention_options
 
 
 class InstallerTests(unittest.TestCase):
@@ -20,6 +20,44 @@ class InstallerTests(unittest.TestCase):
         self.data.mkdir()
         self.old = {'python': 'previous/python.exe', 'sd_scripts': 'previous/scripts'}
         (self.data / 'environment.json').write_text(json.dumps(self.old), encoding='utf-8')
+
+    def test_optional_attention_defaults_install_nothing(self):
+        with patch('moss_trainer.installer.run') as commands:
+            install_attention('python', 'cu128', self.root, 'constraints')
+        commands.assert_not_called()
+
+    def test_optional_xformers_is_pinned_and_cannot_replace_torch(self):
+        for profile, version in [('cu128', '0.0.32.post2'), ('cu124', '0.0.29.post3')]:
+            with patch('moss_trainer.installer.run') as commands:
+                install_attention('python', profile, self.root, 'constraints', xformers=True)
+            pip, kernel = [call.args[0] for call in commands.call_args_list]
+            self.assertIn('xformers==' + version, pip)
+            self.assertIn('--no-deps', pip)
+            self.assertIn('--only-binary=:all:', pip)
+            self.assertIn('https://download.pytorch.org/whl/' + profile, pip)
+            self.assertTrue(kernel[1].endswith('attention_check.py'))
+            self.assertEqual(kernel[-1], 'xformers')
+
+    def test_optional_flash_requires_local_wheel_and_gpu_validation(self):
+        with self.assertRaises(ValueError):
+            validate_attention_options('sd-scripts', flash_wheel='https://example.com/flash.whl')
+        wheel = self.root / 'flash_attn-2.8.3-cp312-cp312-win_amd64.whl'
+        wheel.touch()
+        self.assertEqual(validate_attention_options('sd-scripts', flash_wheel=str(wheel)), str(wheel))
+        with patch('moss_trainer.installer.run') as commands:
+            install_attention('python', 'cu128', self.root, 'constraints', flash_wheel=str(wheel))
+        self.assertIn('--no-deps', commands.call_args_list[0].args[0])
+        self.assertEqual(commands.call_args_list[1].args[0][-1], 'flash')
+        with self.assertRaises(ValueError):
+            install(self.root / 'backend', self.data, backend='kohaku', profile='cu130', xformers=True)
+        self.assertFalse((self.root / 'backend').exists())
+
+    def test_optional_attention_kernel_failure_stops_installation(self):
+        failure = subprocess.CalledProcessError(1, ['attention_check'])
+        with patch('moss_trainer.installer.run', side_effect=[None, failure]) as commands:
+            with self.assertRaises(subprocess.CalledProcessError):
+                install_attention('python', 'cu128', self.root, 'constraints', True, 'flash.whl')
+        self.assertEqual(commands.call_count, 2)
 
     def fake_download(self, url, target):
         if 'commits/main' in url:

@@ -426,6 +426,44 @@ class GuiTests(unittest.TestCase):
         self.app.clear_resume()
         self.assertEqual(self.app.collect()['settings']['training']['resume'], '')
 
+    def test_setup_optional_attention_is_disabled_for_kohaku_and_forwarded_for_sd(self):
+        self.app.setup_dialog()
+        dialog = next(w for w in self.app.winfo_children() if isinstance(w, tk.Toplevel))
+        def descendants(w):
+            return [w] + [item for child in w.winfo_children() for item in descendants(child)]
+        widgets = descendants(dialog)
+        checks = [w for w in widgets if isinstance(w, ttk.Checkbutton)]
+        xf = next(w for w in checks if 'xFormers' in w.cget('text'))
+        flash = next(w for w in checks if 'Flash Attention' in w.cget('text'))
+        self.assertTrue(xf.instate(['disabled']))
+        self.assertTrue(flash.instate(['disabled']))
+        engine = next(w for w in widgets if isinstance(w, ttk.Combobox) and 'sd-scripts' in w.cget('values'))
+        engine.set('sd-scripts')
+        engine.event_generate('<<ComboboxSelected>>')
+        self.app.update()
+        self.assertFalse(xf.instate(['disabled']))
+        self.assertFalse(xf.instate(['selected']))
+        self.assertFalse(flash.instate(['selected']))
+        xf.invoke()
+        begin = next(w for w in widgets if isinstance(w, ttk.Button) and w.cget('text') == '導入・確認・修復を開始')
+        with patch.object(self.app, 'start_setup') as launch:
+            begin.invoke()
+        self.assertEqual(launch.call_args.kwargs, {'xformers': True, 'flash_wheel': ''})
+        self.assertEqual(self.app.collect()['settings']['memory']['attn_mode'], 'torch')
+
+    def test_setup_command_includes_only_selected_sd_attention_options(self):
+        with patch.object(self.app.runner, 'start') as runner:
+            self.app.start_setup(str(Path(self.temp.name) / 'backend'), xformers=True, flash_wheel='C:/selected wheel.whl')
+        argv = runner.call_args.args[0]
+        self.assertIn('--xformers', argv)
+        self.assertEqual(argv[argv.index('--flash-wheel') + 1], 'C:/selected wheel.whl')
+        self.app.set_busy(False, 'test')
+        with patch.object(self.app.runner, 'start') as runner:
+            self.app.start_setup(str(Path(self.temp.name) / 'backend'), backend='kohaku', profile='cu130', xformers=True, flash_wheel='ignored.whl')
+        argv = runner.call_args.args[0]
+        self.assertNotIn('--xformers', argv)
+        self.assertNotIn('--flash-wheel', argv)
+
     def test_installer_launch_and_success_register_new_paths(self):
         original = dict(self.app.env)
         with patch.object(self.app.runner, 'start') as runner:

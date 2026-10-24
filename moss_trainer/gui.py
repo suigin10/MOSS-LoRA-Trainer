@@ -891,7 +891,7 @@ class App(tk.Tk):
             return
         dialog = tk.Toplevel(self)
         dialog.title(tr('かんたん導入 — 専用 venv の作成・修復'))
-        dialog.geometry('850x510')
+        dialog.geometry(f'850x{min(760, max(480, self.winfo_screenheight() - 100))}')
         dialog.transient(self)
         dialog.grab_set()
         dialog.columnconfigure(0, weight=1)
@@ -921,21 +921,63 @@ class App(tk.Tk):
         ttk.Label(body, text=tr('学習エンジン')).grid(row=5, column=0, sticky='w', pady=8)
         selector = ttk.Combobox(body, textvariable=engine, values=['sd-scripts', 'kohaku'], state='readonly')
         selector.grid(row=5, column=1, sticky='w')
-        selector.bind('<<ComboboxSelected>>', lambda _: profile.set('cu130' if engine.get() == 'kohaku' else 'cu128'))
+
         ttk.Label(body, text=tr('Kohakuは別venvに導入。cu130と対応ドライバ、Visual Studio C++ Build Toolsが必要です。Tritonは両エンジンで自動導入しGPU実行を確認します。'),
                   style='Hint.TLabel', wraplength=730).grid(row=6, column=0, columnspan=3, sticky='w', pady=8)
+        optional_xformers = tk.BooleanVar(value=bool(options.get('xformers', False)))
+        optional_flash = tk.BooleanVar(value=bool(options.get('flash_wheel', '')))
+        flash_wheel = tk.StringVar(value=options.get('flash_wheel', ''))
+        extras = ttk.LabelFrame(body, text=tr('sd-scripts: 任意の高速化パッケージ'), padding=10)
+        extras.grid(row=7, column=0, columnspan=3, sticky='ew', pady=8)
+        extras.columnconfigure(0, weight=1)
+        xf = ttk.Checkbutton(extras, text=tr('xFormersを導入（対応版を自動選択）'), variable=optional_xformers)
+        xf.grid(row=0, column=0, columnspan=2, sticky='w')
+        fa = ttk.Checkbutton(extras, text=tr('Flash Attentionを導入（対応wheelを指定）'), variable=optional_flash)
+        fa.grid(row=1, column=0, columnspan=2, sticky='w')
+        wheel_entry = ttk.Entry(extras, textvariable=flash_wheel)
+        wheel_entry.grid(row=2, column=0, sticky='ew', pady=5)
+        def choose_flash():
+            path = filedialog.askopenfilename(parent=dialog, filetypes=[('Flash Attention wheel', 'flash_attn-*.whl')])
+            if path:
+                flash_wheel.set(path)
+        wheel_button = ttk.Button(extras, text=tr('参照…'), command=choose_flash)
+        wheel_button.grid(row=2, column=1, padx=6)
+        ttk.Label(extras, text=tr('通常は標準のtorch SDPAを使用します。両方とも任意で、導入してもAttention設定は変えません。\nFlash AttentionのwheelはPython・PyTorch・CUDA・GPUに対応するものを指定してください。導入後にGPUの順伝播・逆伝播を検証します。'),
+                  style='Hint.TLabel', wraplength=700).grid(row=3, column=0, columnspan=2, sticky='w')
+        def sync_optional(*_):
+            enabled = engine.get() == 'sd-scripts'
+            for widget in (xf, fa):
+                widget.configure(state='normal' if enabled else 'disabled')
+            wheel_enabled = enabled and optional_flash.get()
+            for widget in (wheel_entry, wheel_button):
+                widget.configure(state='normal' if wheel_enabled else 'disabled')
+        optional_flash.trace_add('write', sync_optional)
+        engine.trace_add('write', sync_optional)
+        selector.bind('<<ComboboxSelected>>', lambda _: profile.set('cu130' if engine.get() == 'kohaku' else 'cu128'))
+        sync_optional()
         def begin():
             if not root.get().strip():
                 messagebox.showerror(tr('導入先'), tr('導入先を指定してください'), parent=dialog)
                 return
             target, python, selected = root.get().strip(), base.get().strip(), profile.get()
+            xf_selected = engine.get() == 'sd-scripts' and optional_xformers.get()
+            wheel = flash_wheel.get().strip() if engine.get() == 'sd-scripts' and optional_flash.get() else ''
+            if engine.get() == 'sd-scripts' and optional_flash.get() and not wheel:
+                messagebox.showerror(tr('設定の確認'), tr('Flash Attentionの対応wheelを指定してください。'), parent=dialog)
+                return
+            from .installer import validate_attention_options
+            try:
+                wheel = validate_attention_options(engine.get(), xf_selected, wheel)
+            except ValueError as exc:
+                messagebox.showerror(tr('設定の確認'), str(exc), parent=dialog)
+                return
             dialog.destroy()
-            self.start_setup(target, python, selected, engine.get())
+            self.start_setup(target, python, selected, engine.get(), xformers=xf_selected, flash_wheel=wheel)
         controls = ttk.Frame(dialog, padding=(24, 12))
         controls.grid(row=1, column=0, sticky='ew')
         ttk.Button(controls, text=tr('導入・確認・修復を開始'), style='Accent.TButton', command=begin).pack(side='right')
 
-    def start_setup(self, root, base='', profile='cu128', backend='sd-scripts'):
+    def start_setup(self, root, base='', profile='cu128', backend='sd-scripts', *, xformers=False, flash_wheel=''):
         if self.busy:
             return
         try:
@@ -945,6 +987,10 @@ class App(tk.Tk):
                     '--data-dir', str(self.data_dir), '--profile', profile, '--backend', backend]
             if base:
                 argv.extend(['--base-python', base])
+            if backend == 'sd-scripts' and xformers:
+                argv.append('--xformers')
+            if backend == 'sd-scripts' and flash_wheel:
+                argv.extend(['--flash-wheel', flash_wheel])
             self.operation = 'setup'
             self.progress_text.set(tr('学習環境を導入・確認・修復中'))
             self.notebook.select(self.monitor)

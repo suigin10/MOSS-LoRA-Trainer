@@ -263,4 +263,12 @@ KohakuMossTrainerは **KohakuMoss License 1.0** です。Apache-2.0に第10条�
 
 確認元: https://github.com/KohakuBlueleaf/KohakuMossTrainer/blob/0c4737e3b8787a7df0f2d28a2972640a5f8522f6/LICENSE
 
+## xFormers / Flash Attentionの任意導入
 
+「かんたん導入」でsd-scriptsを選ぶと、任意の高速化パッケージを追加できます。初期状態は両方OFFです。
+
+- xFormers：チェックすると、cu128 / PyTorch 2.8には0.0.32.post2、cu124 / PyTorch 2.6には0.0.29.post3を公式PyTorch配布先から導入します。
+- Flash Attention：チェックして、使用するPython・PyTorch・CUDA・GPUに対応したローカルの `flash_attn-*.whl` を指定します。Windowsでは任意の最新版を自動取得・ソースビルドしません。
+
+導入後はGPUでbf16の順伝播・逆伝播を検証します。失敗した場合はセットアップログを確認してください。チェックを外して再実行しても、導入済みのパッケージはアンインストールしません。
+学習時のAttention設定は自動変更しません。「04 VRAM・速度」で使用する方式を選びます。標準のtorch SDPAにも高速な経路があるため、追加パッケージが必ず速いとは限りません。KohakuのAttention設定には適用しません。

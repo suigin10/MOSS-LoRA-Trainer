@@ -22,6 +22,7 @@ TORCH_PROFILES = {
 # Match the upstream triton-windows PyTorch compatibility table, not latest.
 TRITON_VERSIONS = {'2.6': '3.2', '2.8': '3.4', '2.13': '3.7'}
 KOHAKU_COMMIT = '0c4737e3b8787a7df0f2d28a2972640a5f8522f6'
+XFORMERS_VERSIONS = {'cu128': '0.0.32.post2', 'cu124': '0.0.29.post3'}
 
 
 def install_triton(python, torch_version, cwd):
@@ -33,6 +34,30 @@ def install_triton(python, torch_version, cwd):
          f'{package}>={version},<{major}.{patch + 1}'], cwd=cwd)
     # Import success alone does not prove the JIT/compiler/GPU works.
     run([python, str(Path(__file__).with_name('triton_check.py'))], cwd=cwd)
+
+
+
+def validate_attention_options(backend, xformers=False, flash_wheel=''):
+    if backend != 'sd-scripts' and (xformers or flash_wheel):
+        raise ValueError('Optional xFormers / Flash Attention installation is for sd-scripts only')
+    if flash_wheel:
+        wheel = Path(flash_wheel).expanduser().resolve()
+        if not wheel.is_file() or wheel.suffix.lower() != '.whl' or not wheel.name.lower().startswith('flash_attn-'):
+            raise ValueError('Select an existing flash_attn-*.whl matching Python, PyTorch, CUDA and GPU')
+        return str(wheel)
+    return ''
+
+
+def install_attention(python, profile, source, constraints, xformers=False, flash_wheel=''):
+    # Install only binary extensions; never replace the pinned torch dependency.
+    if xformers:
+        run([python, '-m', 'pip', 'install', '--no-deps', '--only-binary=:all:', '-c', constraints,
+             'xformers==' + XFORMERS_VERSIONS[profile], '--index-url',
+             'https://download.pytorch.org/whl/' + profile], cwd=source)
+        run([python, str(Path(__file__).with_name('attention_check.py')), 'xformers'], cwd=source)
+    if flash_wheel:
+        run([python, '-m', 'pip', 'install', '--no-deps', '--only-binary=:all:', '-c', constraints, flash_wheel], cwd=source)
+        run([python, str(Path(__file__).with_name('attention_check.py')), 'flash'], cwd=source)
 
 
 def register_environment(data_dir, additions):
@@ -135,7 +160,8 @@ def installation_lock(folder):
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def install(root, data_dir, base_python=None, profile='cu128', backend='sd-scripts'):
+def install(root, data_dir, base_python=None, profile='cu128', backend='sd-scripts', *, xformers=False, flash_wheel=''):
+    flash_wheel = validate_attention_options(backend, xformers, flash_wheel)
     if backend not in ('sd-scripts', 'kohaku'):
         raise ValueError('Unknown backend: ' + backend)
     if backend == 'kohaku' and profile != 'cu130':
@@ -152,15 +178,15 @@ def install(root, data_dir, base_python=None, profile='cu128', backend='sd-scrip
     with installation_lock(folder):
         if backend == 'kohaku':
             return _install_kohaku(folder, data_dir, base_python)
-        return _install(folder, data_dir, base_python, profile)
+        return _install(folder, data_dir, base_python, profile, xformers=xformers, flash_wheel=flash_wheel)
 
 
-def _install(folder, data_dir, base_python=None, profile='cu128'):
+def _install(folder, data_dir, base_python=None, profile='cu128', *, xformers=False, flash_wheel=''):
     if profile not in TORCH_PROFILES:
         raise ValueError('CUDA プロファイルが不正です')
     base = resolve_base_python(base_python)
     folder, data_dir = Path(folder).resolve(), Path(data_dir).resolve()
-    record = {'status': 'installing', 'base_python': base, 'profile': profile, 'directory': str(folder)}
+    record = {'status': 'installing', 'base_python': base, 'profile': profile, 'directory': str(folder), 'optional_attention': {'xformers': xformers, 'flash_wheel': flash_wheel}}
     try:
         print('専用環境: ' + str(folder), flush=True)
         print('[1/6] sd-scripts のソースを取得（Git のインストールは不要）', flush=True)
@@ -204,6 +230,7 @@ def _install(folder, data_dir, base_python=None, profile='cu128'):
         run([python, '-m', 'pip', 'install', '-c', constraints, 'tensorboard', 'bitsandbytes', 'pytorch-optimizer==4.0.0'], cwd=source)
         print('Triton を導入して GPU カーネルのコンパイル・実行を確認', flush=True)
         install_triton(python, torch_version, source)
+        install_attention(python, profile, source, constraints, xformers, flash_wheel)
         run([python, '-m', 'pip', 'check'], cwd=source)
 
         print('[5/6] CUDA / bf16 と MOSS スクリプトを検証', flush=True)
@@ -221,7 +248,7 @@ def _install(folder, data_dir, base_python=None, profile='cu128'):
         print('[6/6] GUI に新しい環境を登録', flush=True)
         record.update(status='completed', environment=env, probe=info)
         atomic_json(folder / 'installation.json', record)
-        atomic_json(data_dir / 'setup_options.json', {'root': str(folder.parent), 'profile': profile, 'base_python': base_python or ''})
+        atomic_json(data_dir / 'setup_options.json', {'root': str(folder.parent), 'profile': profile, 'backend': 'sd-scripts', 'base_python': base_python or '', 'xformers': xformers, 'flash_wheel': flash_wheel})
         # This is the commit point. Failures before here preserve the previous GUI configuration.
         env = register_environment(data_dir, env)
         print('導入完了。モデルと画像フォルダを選択すると学習を開始できます。', flush=True)
@@ -296,9 +323,11 @@ def main():
     parser.add_argument('--base-python')
     parser.add_argument('--profile', choices=[*TORCH_PROFILES, 'cu130'], default='cu128')
     parser.add_argument('--backend', choices=['sd-scripts', 'kohaku'], default='sd-scripts')
+    parser.add_argument('--xformers', action='store_true', help='Install a matching binary xFormers wheel (sd-scripts)')
+    parser.add_argument('--flash-wheel', default='', help='Local compatible Flash Attention wheel (sd-scripts)')
     args = parser.parse_args()
     try:
-        install(args.root, args.data_dir, args.base_python, args.profile, args.backend)
+        install(args.root, args.data_dir, args.base_python, args.profile, args.backend, xformers=args.xformers, flash_wheel=args.flash_wheel)
     except Exception as exc:
         print('\n導入に失敗しました: ' + str(exc), file=sys.stderr, flush=True)
         raise SystemExit(1)

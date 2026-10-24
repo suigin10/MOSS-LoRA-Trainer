@@ -2,6 +2,8 @@
 
 ## 0.2.2 — 2026-10-24
 
+- かんたん導入にsd-scripts用xFormers / Flash Attentionの任意導入を追加。初期状態は両方OFF。対応xFormersの自動選択、Flash Attentionのローカルwheel指定、導入後のGPU順伝播・逆伝播検証に対応。Attentionの選択値は維持。
+
 - KohakuVault 1.0でキャッシュ読み込みが `read_range` エラーになる問題を修正。公開APIによる一括読み込みへ対応し、従来版も維持。
 
 - 起動時に最後に開いたプロジェクトを復元。名称変更後もIDで特定し、対象がない場合はデフォルト設定の新規プロジェクトを作成します。

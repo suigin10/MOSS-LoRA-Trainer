@@ -490,5 +490,10 @@
   "cosine_with_restarts専用。2は2周期（途中の再スタート1回）。warmupは学習開始時のみ": "cosine_with_restarts only. 2 means two cycles with one restart. Warmup runs only at the start of training.",
   "cosine・cosine_with_restarts専用。0.1は初期学習率の10%。既存設定の未指定値は従来の0を維持": "For cosine and cosine_with_restarts. 0.1 means 10% of the initial LR. Older settings without this value retain the previous 0.",
   "Restart周期数は1以上にしてください。": "Restart cycles must be at least 1.",
-  "再スタートにはwarmup後に周期数以上のSTEP数が必要です。": "Restarts require at least one step per cycle after warmup."
+  "再スタートにはwarmup後に周期数以上のSTEP数が必要です。": "Restarts require at least one step per cycle after warmup.",
+  "sd-scripts: 任意の高速化パッケージ": "sd-scripts: optional attention packages",
+  "xFormersを導入（対応版を自動選択）": "Install xFormers (select a compatible version automatically)",
+  "Flash Attentionを導入（対応wheelを指定）": "Install Flash Attention (select a compatible wheel)",
+  "通常は標準のtorch SDPAを使用します。両方とも任意で、導入してもAttention設定は変えません。\nFlash AttentionのwheelはPython・PyTorch・CUDA・GPUに対応するものを指定してください。導入後にGPUの順伝播・逆伝播を検証します。": "Use the standard torch SDPA normally. Both packages are optional and installation does not change the attention setting.\nChoose a Flash Attention wheel matching Python, PyTorch, CUDA and GPU. GPU forward and backward passes are checked after installation.",
+  "Flash Attentionの対応wheelを指定してください。": "Select a compatible Flash Attention wheel."
 }

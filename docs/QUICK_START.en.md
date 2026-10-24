@@ -61,3 +61,12 @@ The footer shows elapsed time, measured average step time, ETA and dedicated GPU
 The user reported completion with the defaults at the initial v0.2.2 publication on an RTX 4070 12GB on 2026-10-24. Earlier 4000-step Kohaku and 1500-step runs used different settings. CAME updates and restart-scheduler resume were checked on CPU. See [development and verification notes](../CONTRIBUTING.md#検証状況) for scope and historical measurements.
 
 KohakuMoss License 1.0 includes an additional naming condition; the product name is **MOSS LoRA Trainer with Kohaku**. See [third-party notices](../THIRD_PARTY_NOTICES.md) and the bundled license in `licenses/`.
+
+## Optional xFormers / Flash Attention
+
+In Easy setup, choose sd-scripts to enable the optional attention packages. Both are off by default.
+
+- xFormers: install a pinned matching wheel from the official PyTorch index (0.0.32.post2 for cu128 / PyTorch 2.8; 0.0.29.post3 for cu124 / PyTorch 2.6).
+- Flash Attention: select a local `flash_attn-*.whl` matching Python, PyTorch, CUDA and GPU. Windows setup does not silently download an arbitrary third-party build or compile from source.
+
+The pinned PyTorch is preserved. Installation checks bf16 GPU forward and backward passes; failures stop setup and appear in its log. Unchecking an option does not uninstall an existing package. Select the attention mode separately in 04 VRAM / Speed. Standard torch SDPA already has optimized kernels, so performance gains are not guaranteed. These options do not apply to Kohaku.

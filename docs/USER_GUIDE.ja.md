@@ -74,10 +74,10 @@ sd-scripts の環境要件を優先してください。GUI と学習用 Python 
 
 ## 初期値と変更方法
 
-新規学習は32/32・AdamW・学習率1e-4・cosine、FFN_downのみ・学習上限2000STEP・100STEPごと保存が初期値です。このGUIではOptimizerは両エンジンともAdamW、学習対象はFFN_downのみ、保存間隔は100STEPにしています。「03 学習」のKohaku学習対象でattn-mlp（Attention＋FFN）・attn（Attentionのみ）にも切り替えられます。対象変更時は新規学習を開始してください。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
+新規学習は16/16・AdamW・学習率1e-4・cosine、FFN_downのみ・学習上限2500STEP・100STEPごと保存が初期値です。このGUIではOptimizerは両エンジンともAdamW、学習対象はFFN_downのみ、保存間隔は100STEPにしています。「03 学習」のKohaku学習対象でattn-mlp（Attention＋FFN）・attn（Attentionのみ）にも切り替えられます。対象変更時は新規学習を開始してください。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
 UIの値は保存済みプロジェクトの設定です。更新だけで既存値を新しい初期値へ上書きしません。
 CAMEも選択できます。必要パッケージは「かんたん導入」で追加します。既定のSchedulerはcosineです。比較用のcosine_with_restartsも選べます。Restart周期数は初期値2（2周期・再スタート1回）で、この方式を選んだときだけ編集できます。
-Timestepの新規初期値はshift、学習用flow shiftは3.0です。Kohakuも対応します。方式を変える場合はstateを外して新規学習してください。自然文キャプションではCaption dropoutを0にすることを推奨します。
+Timestepの新規初期値はsigma、学習用flow shiftは1.0です。Kohakuも対応します。方式を変える場合はstateを外して新規学習してください。自然文キャプションではCaption dropoutを0にすることを推奨します。
 キャプション単体の上限は「01モデル」、画像＋テキストの合計上限は「04 VRAM」のKohaku設定です。
 
 ### LoRAとstateの保存
@@ -272,3 +272,11 @@ KohakuMossTrainerは **KohakuMoss License 1.0** です。Apache-2.0に第10条�
 
 導入後はGPUでbf16の順伝播・逆伝播を検証します。失敗した場合はセットアップログを確認してください。チェックを外して再実行しても、導入済みのパッケージはアンインストールしません。
 学習時のAttention設定は自動変更しません。「04 VRAM・速度」で使用する方式を選びます。標準のtorch SDPAにも高速な経路があるため、追加パッケージが必ず速いとは限りません。KohakuのAttention設定には適用しません。
+
+## 学習方式とScheduler
+
+「03 学習」でLoRA / LoKr / LoHaを選択できます（両エンジン対応、初期値LoRA）。LoKr factorはLoKr選択時だけ、Polynomial powerはpolynomial選択時だけ編集できます。方式・factor・Schedulerの変更時はstateを外し、新規学習してください。詳しくは[設定ガイド](STABLE_SETTINGS.md#lora--lokr--loha)を参照してください。
+
+「03 学習」の「キャラクターLoKr（実験的）」から、LoKr factor 8・AdamW8bit・学習率0.0001・Weight decay 0.00005・shift・解像度512・batch 2・勾配累積2・Kohaku EMA 0.99・ConvRot INT8を一括設定できます。適用すると再開stateと初期重みの指定を解除します。
+
+キャラクターLoKrの機能・設定値は実験的です。

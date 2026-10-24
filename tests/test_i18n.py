@@ -70,6 +70,13 @@ class EnglishGuiTests(unittest.TestCase):
         self.app.change_language()
         self.app.update()
 
+    def test_character_lokr_button_is_translated_and_applies_recipe(self):
+        self.switch()
+        self.assertEqual(self.app.character_lokr_button.cget('text'), 'Character LoKr (experimental)')
+        self.app.character_lokr_button.invoke()
+        self.assertEqual(self.app.collect()['settings']['training']['lokr_factor'], 8)
+        self.assertEqual(self.app.status.get(), 'Character LoKr applied (unsaved)')
+
     def test_switch_preserves_unsaved_settings_and_language_on_restart(self):
         self.app.variables[('model', 'vae')].set('D:/モデル/{猫}.safetensors')
         self.app.variables[('training', 'max_train_steps')].set('1234')

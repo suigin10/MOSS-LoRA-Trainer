@@ -3,7 +3,7 @@
 **MOSS-ImageのLoRAを作成する、Windows向け学習GUI。**
 Kohaku / sd-scriptsの導入から、データセット設定・学習・追加学習・LoRA出力まで操作できます。
 
-[最新版 v0.2.2 をダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
+[最新版 v0.2.3 をダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
 
 <img src="docs/images/amber-ui.png" alt="琥珀色UIの学習設定画面" width="800">
 
@@ -25,6 +25,7 @@ GUIはPython標準のtkinterで動作します。学習用パッケージとTrit
 - **2つの学習エンジン：** 新規プロジェクトはKohaku。sd-scriptsも選択できます。
 - **プロジェクト管理：** 設定の保存・コピー・読み込みに対応。起動時は最後のプロジェクトを復元し、見つからなければデフォルトで新規作成します。
 - **学習と追加学習：** キャッシュ準備、stateからの再開、ログ・進捗・VRAM表示、サンプル生成に対応します。
+- **学習方式：** LoRA / LoKr / LoHaを選択可能。「キャラクターLoKr」プリセットで学習条件を一括設定できます（機能・設定値は実験的）。cosine・再スタート付きcosine・polynomialなどのSchedulerに対応します。
 - **LoRA出力：** KohakuはComfyUI形式・LyCORIS形式で保存。GUIの表示言語は日本語／英語を切り替えられます。
 
 ## ガイド

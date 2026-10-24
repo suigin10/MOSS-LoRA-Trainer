@@ -34,6 +34,36 @@ def archive_exports(run_dir, output_name):
         temp.replace(destination)
 
 
+def export_ema(k, layout, built, parts, step, root, is_main):
+    """Export EMA adapters separately, restoring all live weights even on failure.
+
+    GUI runs are single GPU. EMA.state_dict also joins a background host update.
+    Normal checkpoints/exports always keep the unaveraged training parameters.
+    """
+    if not is_main or not k.get('EMA'):
+        return
+    from kohakumoss.training.build.model import export
+    tag = f"ema{k['EMA']:g}"
+    prefix = tag + '/'
+    averages = {name[len(prefix):]: value for name, value in parts.ema.state_dict().items()
+                if name.startswith(prefix)}
+    if not averages:
+        raise ValueError('EMA buffers are missing: ' + tag)
+    with layout.full_weights(built.backbone):
+        raw = built.trainable.state_dict()
+        if set(averages) - set(raw):
+            raise ValueError('EMA parameter names do not match adapter state')
+        try:
+            built.trainable.load_state_dict({**raw, **averages})
+            ema_knobs = {**k, 'RUN_NAME': k['RUN_NAME'] + '-' + tag}
+            for path in export(ema_knobs, built, root,
+                               {'kohakumoss_step': str(step), 'kohakumoss_algo': k['ALGO'],
+                                'moss_ema_decay': str(k['EMA'])}):
+                print('EMA exported: ' + str(path), flush=True)
+        finally:
+            built.trainable.load_state_dict(raw)
+
+
 def main():
     if __package__:
         from .kohaku_vault_compat import apply
@@ -53,12 +83,24 @@ def main():
         return original(manager)
 
     CheckpointManager.prune = prune
+    entry = original_export = None
     try:
         defaults = runpy.run_path(str(source / 'scripts/train/moss.py'))
         overrides = runpy.run_path(str(run_dir / 'kohaku_train.py'))
         knobs = {**defaults, **{k: v for k, v in overrides.items() if k.isupper()}}
+        if knobs.get('EMA'):
+            from kohakumoss.training import entry
+            original_export = entry.export_into
+
+            def with_ema(*args):
+                original_export(*args)
+                export_ema(*args)
+
+            entry.export_into = with_ema
         defaults['run'](knobs)
     finally:
+        if original_export is not None:
+            entry.export_into = original_export
         CheckpointManager.prune = original
         archive_exports(run_dir, name)
 

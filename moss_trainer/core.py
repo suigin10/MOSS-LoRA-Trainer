@@ -45,17 +45,22 @@ FIELDS = {
     },
     'training': {
         'output_name': ('出力 LoRA 名', 'moss_lora', None, 'safetensors のファイル名（拡張子不要）'),
-        'network_dim': ('Rank / dim', 32, None, 'Kohaku公式LoRA初期値32。sd-scriptsの開始値は設定ガイドを参照'),
-        'network_alpha': ('Alpha', 32.0, None, 'Kohaku公式LoRA初期値32。Rank・Alphaはstate再開時に変更できません'),
+        'network_algo': ('学習方式', 'LoRA', ['LoRA', 'LoKr', 'LoHa'], '両エンジンに対応。方式を変更するときはstateを外して新規学習してください'),
+        'lokr_factor': ('LoKr factor', -1, None, 'LoKr専用。-1は自動分解、正の整数で分解係数を指定（例: 8）。Rankが同じでも方式によりパラメーター数が異なります'),
+        'network_dim': ('Rank / dim', 16, None, 'このGUIの初期値16。方式・データセットに応じて調整'),
+        'network_alpha': ('Alpha', 16.0, None, 'このGUIの初期値16。Rank・Alphaはstate再開時に変更できません'),
         'kohaku_train_target': ('Kohaku: 学習対象', 'ffn-down', ['ffn-down', 'attn-mlp', 'attn'], 'ffn-down: FFN_downのみ / attn-mlp: Attention＋FFN / attn: Attentionのみ。対象を変更するときは新規学習してください'),
         'learning_rate': ('学習率', 0.0001, None, '固定の最適値ではありません。データセットに応じて調整'),
         'optimizer_type': ('Optimizer', 'AdamW', ['AdamW', 'AdamW8bit', 'CAME', 'Adafactor'], '両エンジンの初期値はAdamW。CAMEは「かんたん導入」で必要パッケージを追加。Adafactorはsd-scripts専用'),
-        'lr_scheduler': ('LR scheduler', 'cosine', ['constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear'], '初期値cosine。cosine_with_restartsは周期ごとに学習率を上げ直します。state再開では元の設定を維持'),
+        'weight_decay': ('Weight decay', '', None, '空欄は各Optimizerの既定値。記事のキャラクターレシピは0.00005'),
+        'kohaku_ema': ('Kohaku: EMA decay', 0.0, None, '0で無効。0より大きく1未満で有効（例: 0.99）。sd-scriptsでは適用されません'),
+        'lr_scheduler': ('LR scheduler', 'cosine', ['constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear', 'polynomial'], '初期値cosine。cosine_with_restartsは周期ごとに学習率を上げ直します。state再開では元の設定を維持'),
         'lr_scheduler_num_cycles': ('Restart周期数', 2, None, 'cosine_with_restarts専用。2は2周期（途中の再スタート1回）。warmupは学習開始時のみ'),
+        'lr_scheduler_power': ('Polynomial power', 1.0, None, 'polynomial専用。1は直線的に減衰、1より大きいと早めに減衰。両エンジンで最終学習率は0'),
         'lr_warmup_steps': ('Warmup steps', 100, None, 'Kohaku公式初期値100。開始時に学習率を徐々に上げるstep数。constantでは使用しません'),
         'kohaku_lr_min_ratio': ('Kohaku: 最小学習率の比率', 0.1, None, 'cosine・cosine_with_restarts専用。0.1は初期学習率の10%。既存設定の未指定値は従来の0を維持'),
         'max_train_epochs': ('学習エポック数（steps=0 時）', 10, None, '最大 steps が 0 の場合だけ使用'),
-        'max_train_steps': ('最大 steps（0: エポック指定）', 2000, None, 'このGUIの開始値2000。画像数・学習対象に応じて調整'),
+        'max_train_steps': ('最大 steps（0: エポック指定）', 2500, None, 'このGUIの開始値2500。画像数・学習対象に応じて調整'),
         'gradient_accumulation_steps': ('勾配累積', 1, None, '実効バッチ数 = バッチサイズ × 勾配累積'),
         'max_grad_norm': ('勾配クリップ', 1.0, None, 'Adafactor 選択時は書き出し時に 0 を使用'),
         'save_every_n_epochs': ('何エポックごとに保存（0: 無効）', 0, None, ''),
@@ -92,11 +97,11 @@ FIELDS = {
         'compile': ('torch.compile', False, None, '追加環境が必要。まず OFF で動作を確認'),
     },
     'flow': {
-        'timestep_sampling': ('Timestep sampling', 'shift', ['sigma', 'uniform', 'sigmoid', 'shift', 'flux_shift'], '初期値shift。Kohakuはshiftとsigmaに対応。sigmaは従来のMOSS方式'),
+        'timestep_sampling': ('Timestep sampling', 'sigma', ['sigma', 'uniform', 'sigmoid', 'shift', 'flux_shift'], '初期値sigma。Kohakuはsigmaとshiftに対応。sigmaは従来のMOSS方式'),
         'weighting_scheme': ('Weighting scheme', 'logit_normal', ['logit_normal', 'uniform', 'sigma_sqrt', 'cosmap', 'none', 'mode'], ''),
         'logit_mean': ('Logit mean', -1.09, None, ''),
         'logit_std': ('Logit std', 0.95, None, ''),
-        'discrete_flow_shift': ('学習用 flow shift', 3.0, None, 'shiftの開始値3.0。従来のsigma設定は1.0。サンプル生成用のshiftとは別'),
+        'discrete_flow_shift': ('学習用 flow shift', 1.0, None, 'sigmaの開始値1.0。shiftを試す場合は3.0が目安。サンプル生成用のshiftとは別'),
         'sigmoid_scale': ('Sigmoid scale', 1.0, None, ''),
         'mode_scale': ('Mode scale', 1.29, None, 'weighting_scheme=mode の場合に使用'),
         'train_text_embedder': ('DiT の Text embedder も学習', False, None, 'Qwen の学習とは別。TE キャッシュと併用可'),
@@ -149,6 +154,21 @@ def apply_preset(settings, preset):
              cache_text_encoder_outputs=True, cache_text_encoder_outputs_to_disk=True)
     settings['dataset']['batch_size'] = 1
     m['kohaku_memory_profile'] = 'ckpt-resident'
+
+
+def apply_character_lokr_preset(settings):
+    updates = {
+        'training': {'network_algo': 'LoKr', 'lokr_factor': 8,
+                     'optimizer_type': 'AdamW8bit', 'learning_rate': 0.0001,
+                     'weight_decay': '0.00005', 'kohaku_ema': 0.99,
+                     'gradient_accumulation_steps': 2, 'resume': '', 'network_weights': ''},
+        'dataset': {'resolution': 512, 'batch_size': 2},
+        'memory': {'convrot_int8': True, 'convrot_int8_text_encoder': True},
+        'flow': {'timestep_sampling': 'shift', 'discrete_flow_shift': 3.0, 'sigmoid_scale': 1.0},
+    }
+    for group, values in updates.items():
+        settings[group].update(values)
+    return updates
 
 
 def atomic_json(path, data):
@@ -276,6 +296,17 @@ def validate(project, env=None, files=False):
     require(1 <= s['model']['moss_max_token_length'] <= 4096, tr('最大トークン数は 1〜4096 にしてください'))
     for key in ('network_dim', 'network_alpha', 'learning_rate', 'gradient_accumulation_steps'):
         require(t[key] > 0, tr('{p0}: 0 より大きい値が必要です', p0=key))
+    if t['weight_decay'].strip():
+        try:
+            decay = float(t['weight_decay'])
+            require(math.isfinite(decay) and decay >= 0, tr('Weight decayは0以上の有限の数値にしてください。'))
+        except ValueError:
+            require(False, tr('Weight decayは0以上の有限の数値にしてください。'))
+    require(0 <= t['kohaku_ema'] < 1, tr('EMA decayは0以上1未満にしてください。'))
+    if t['network_algo'] == 'LoKr':
+        require(t['lokr_factor'] == -1 or t['lokr_factor'] > 0, tr('LoKr factorは-1または1以上の整数にしてください。'))
+    if t['lr_scheduler'] == 'polynomial':
+        require(t['lr_scheduler_power'] > 0, tr('Polynomial powerは0より大きい値にしてください。'))
     require(t['max_train_epochs'] >= 0, tr('{p0}: 0 以上にしてください', p0='max_train_epochs'))
     if t['max_train_steps'] == 0:
         require(t['max_train_epochs'] > 0, tr('{p0}: 0 より大きい値が必要です', p0='max_train_epochs'))
@@ -347,6 +378,11 @@ def validate(project, env=None, files=False):
     if files:
         env = selected_environment(env or ENV_DEFAULTS, s)
         require(Path(env['python']).is_file() and Path(env['python']).is_absolute(), tr('学習用 Python の実行ファイルを絶対パスで指定してください'))
+        if is_sd_scripts and t['network_algo'] != 'LoRA':
+            module = Path(source_dir(env)) / 'networks' / (t['network_algo'].lower() + '.py')
+            base = module.with_name('network_base.py')
+            require(module.is_file() and base.is_file() and 'MossImageBlock' in base.read_text(encoding='utf-8'),
+                    tr('LoHa・LoKrのMOSS対応には新しいsd-scriptsが必要です。「かんたん導入」で別のフォルダに専用環境を作成してください。'))
         require(environment_valid(env), tr('選択した学習エンジンのPythonとソースを「かんたん導入」または「実行環境」で指定してください。'))
         for key in ('pretrained_model_name_or_path', 'text_encoder', 'vae'):
             path = Path(s['model'][key])
@@ -428,11 +464,15 @@ def resume_differences(project, info):
         'model': tuple(FIELDS['model']), 'dataset': tuple(FIELDS['dataset']),
         'flow': tuple(FIELDS['flow']),
         'memory': ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'),
-        'training': ('network_dim', 'network_alpha', 'kohaku_train_target', 'optimizer_type', 'lr_scheduler', 'learning_rate',
+        'training': ('weight_decay', 'kohaku_ema', 'network_algo', 'lokr_factor', 'lr_scheduler_power', 'network_dim', 'network_alpha', 'kohaku_train_target', 'optimizer_type', 'lr_scheduler', 'learning_rate',
                      'lr_warmup_steps', 'lr_scheduler_num_cycles', 'kohaku_lr_min_ratio', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
     }.items():
         for key in keys:
-            if key == 'kohaku_train_target' and backend(project['settings']) != 'kohaku':
+            if key == 'lokr_factor' and project['settings']['training']['network_algo'] != 'LoKr':
+                continue
+            if key == 'lr_scheduler_power' and project['settings']['training']['lr_scheduler'] != 'polynomial':
+                continue
+            if key in ('kohaku_train_target', 'kohaku_ema') and backend(project['settings']) != 'kohaku':
                 continue
             if key == 'lr_scheduler_num_cycles' and project['settings']['training']['lr_scheduler'] != 'cosine_with_restarts':
                 continue
@@ -515,7 +555,16 @@ def training_config(project, run_dir):
     for key in ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'):
         config.pop(key, None)
     config.pop('kohaku_lr_min_ratio', None)  # Kohaku-only scheduler parameter
+    config.pop('kohaku_ema', None)
+    weight_decay = config.pop('weight_decay', '')
     config.pop('kohaku_train_target', None)
+    algo = config.pop('network_algo', 'LoRA')
+    factor = config.pop('lokr_factor', -1)
+    config['network_module'] = {'LoRA': 'networks.lora_generic', 'LoKr': 'networks.lokr', 'LoHa': 'networks.loha'}[algo]
+    if config['lr_scheduler'] == 'polynomial':
+        config['lr_scheduler_args'] = ['lr_end=0.0']
+    else:
+        config.pop('lr_scheduler_power', None)
     if config['lr_scheduler'] != 'cosine_with_restarts':
         config.pop('lr_scheduler_num_cycles', None)
     config.pop('keep_latest_state_only', None)
@@ -532,6 +581,8 @@ def training_config(project, run_dir):
     if config['optimizer_type'] == 'Adafactor':
         config['optimizer_args'] = ['relative_step=False', 'scale_parameter=False', 'warmup_init=False']
         config['max_grad_norm'] = 0.0
+    if weight_decay.strip():
+        config.setdefault('optimizer_args', []).append(f'weight_decay={float(weight_decay)}')
     if config['optimizer_type'] == 'CAME':
         config['optimizer_type'] = 'pytorch_optimizer.CAME'
     if config['cpu_offload_checkpointing'] or config['unsloth_offload_checkpointing']:
@@ -540,6 +591,8 @@ def training_config(project, run_dir):
     flow_keys = ('timestep_sampling', 'weighting_scheme', 'logit_mean', 'logit_std', 'discrete_flow_shift', 'sigmoid_scale', 'mode_scale')
     config.update({k: f[k] for k in flow_keys})
     args = [f'rank_dropout={f["rank_dropout"]}', f'module_dropout={f["module_dropout"]}']
+    if algo == 'LoKr':
+        args.append(f'factor={factor}')
     if f['train_text_embedder']:
         args.extend(['train_text_embedder=True'])
     for key in ('exclude_patterns', 'include_patterns'):

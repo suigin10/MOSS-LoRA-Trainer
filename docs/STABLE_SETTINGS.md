@@ -5,18 +5,19 @@
 | 項目 / Setting | Kohaku（新規初期値） | sd-scripts（手動で設定） |
 | --- | --- | --- |
 | 解像度 / Resolution | 1024 | 1024 |
-| Rank / Alpha | 32 / 32 | 16 / 1 |
+| 学習方式 / Adapter type | LoRA | LoRA |
+| Rank / Alpha | 16 / 16 | 16 / 16 |
 | Optimizer | AdamW | AdamW |
 | 学習率 / Learning rate | 0.0001 | 0.0001 |
 | Scheduler | cosine | cosine |
 | Warmup | 100 steps | 100 steps |
 | 最小学習率の比率 / Minimum LR ratio | 0.1（初期学習率の10%） | 対象外 |
 | 学習対象 / Training target | ffn-down（FFN_downのみ） | 標準（または下記のFFN_down指定） |
-| 最大STEP / Total steps | 2000 | 2000 |
+| 最大STEP / Total steps | 2500 | 2500 |
 | 保存間隔 / Save interval | 100 steps | 100 steps |
 | Caption dropout | 0.1（自然文は0推奨） | 0.05（自然文は0推奨） |
-| Timestep sampling | shift | shift |
-| 学習用 flow shift | 3.0 | 3.0 |
+| Timestep sampling | sigma | sigma |
+| 学習用 flow shift | 1.0 | 1.0 |
 | Sigmoid scale | 1.0 | 1.0 |
 | 勾配クリップ / Gradient clipping | 1 | 1 |
 | Batch / 勾配累積 / Accumulation | 1 / 1 | 1 / 1 |
@@ -43,6 +44,41 @@ Switching engines does not reset training settings. Apply the right-hand column 
 - Kohakuのautoはモデルの保存精度を使います。12GBではINT8のDiT・Qwenファイルを指定してください。
 - KohakuでVRAMが不足する場合は、メモリ構成をckpt-ring4-actoff-optstream-gradoffへ変更します。
 - VRAMプリセットはメモリ関連項目とbatchのみ変更します。sd-scriptsの16GBはINT8 / swap 0、24GB以上はbf16 / swap 0が開始値です。
+
+## LoRA / LoKr / LoHa
+
+「03 学習」の「学習方式」で選びます。Kohaku・sd-scriptsの両方に対応し、初期値はLoRAです。Rank・Alpha・学習率は方式を切り替えても保持します。同じRankでも学習パラメーター数や効き方は異なります。
+
+| 方式 | 設定 |
+| --- | --- |
+| LoRA | 通常の低ランク方式。既存プロジェクトもLoRAを維持 |
+| LoKr | Kronecker積を使う方式。factorの初期値-1は自動分解。参考ガイドのfactor 8も指定可能 |
+| LoHa | Hadamard積を使う方式。LoKr factorは使用しません |
+
+方式やLoKr factorを変える場合はstateを外して新規学習してください。sd-scriptsで初期重みを指定する場合も同じ方式の重みを使用します。古いsd-scriptsがLoHa・LoKrのMOSS対応を含まない場合は、「かんたん導入」で別フォルダに新しい専用環境を作成してください。
+
+Kohakuの出力は従来どおりComfyUI形式・LyCORIS形式の2種類です。読み込み先にも選んだ方式の対応が必要です。LoHa・LoKrでAttentionを含めると、fused QKVのComfyUI出力に密行列の差分が含まれ、ファイルが大きくなる場合があります。
+
+[参考ガイド](https://www.imagelora.dev/guides/how-to-train-moss-image-lora)のLoKr設定は別の学習ツールの例です。factor 8を全データセット共通の推奨値とはしていません。[sd-scripts公式](https://github.com/kohya-ss/sd-scripts/blob/main/docs/loha_lokr.md)
+
+### キャラクターLoKr プリセット（実験的）
+
+機能・設定値は実験的です。
+
+「03 学習」の「キャラクターLoKr（実験的）」を押すと、[MOSS Image character recipe that works](https://www.imagelora.dev/guides/how-to-train-moss-image-lora)を参考に以下を設定します。「01 モデル」にはMOSS Image BaseのConvRot INT8モデルとQwenのConvRot INT8ファイルを指定してください。
+
+| 項目 | 設定 |
+| --- | --- |
+| 学習方式 / LoKr factor | LoKr / 8 |
+| Optimizer / 学習率 | AdamW8bit / 0.0001 |
+| Weight decay | 0.00005 |
+| Timestep sampling / 学習用flow shift / Sigmoid scale | shift / 3.0 / 1.0 |
+| Kohaku: EMA decay | 0.99 |
+| バッチ / 勾配累積 | 2 / 2（実効バッチ4） |
+| 解像度 | 512 |
+| DiT・Qwen ConvRot INT8 | ON |
+
+適用すると再開state・初期重みの指定を解除します。設定を確認して保存してください。Kohakuでは通常版に加えて`-ema0.99-comfy.safetensors`・`-ema0.99-lycoris.safetensors`も出力し、再開stateにEMA状態を保存します。
 
 ## 学習対象
 
@@ -78,11 +114,17 @@ sd-scriptsでもFFN_downのみを試す場合は「05 Flow・LoRA 詳細」で�
 - Kohakuは「最小学習率の比率」を各周期に適用します（初期値0.1）。sd-scriptsは各周期を0に向けて減衰します。割り切れない周期はKohakuでは整数STEPに分割します。
 - Scheduler・周期数を変更するときはstateを外して新規学習してください。Kohakuのstate再開では総STEP数も維持します。
 
+### Polynomial
+
+両エンジンで`polynomial`も選択できます。Warmup後から0まで減衰します。専用の「Polynomial power」は1でlinear相当、1より大きいと早めに減衰し、0より大きく1未満では後半に急減します。初期値は1です。cosineやlinear等ではこの値を使用しません。
+
+選択肢は`constant`・`constant_with_warmup`・`cosine`・`cosine_with_restarts`・`linear`・`polynomial`です。通常は既定のcosineから始めてください。`constant`ではwarmupを使用しません。
+
 ## Timestep sampling
 
-新規Kohakuとsd-scriptsの開始設定はshift・学習用flow shift 3.0・sigmoid scale 1.0です。Kohakuではlogit_normal（mu=0、s=sigmoid scale）に静的shiftを適用し、sd-scriptsのshiftと同じ分布を作ります。KohakuのWeighting scheme欄はlogit_normalのまま使用します。shift時はlogit mean / stdを使用しません。
+新規Kohakuとsd-scriptsの開始設定はsigma・学習用flow shift 1.0です。sigmaではlogit mean -1.09・logit std 0.95を使用します。shiftを試す場合はTimestep samplingをshift、学習用flow shiftを3.0、sigmoid scaleを1.0に変更します。Kohakuではlogit_normal（mu=0、s=sigmoid scale）に静的shiftを適用し、sd-scriptsのshiftと同じ分布を作ります。KohakuのWeighting scheme欄はlogit_normalのまま使用します。shift時はlogit mean / stdを使用しません。
 
-従来のKohaku方式へ戻す場合はsigma・logit_normal・学習用flow shift 1.0を指定します。既存プロジェクトは保存済みのsigma・sigmoid等を維持します。方式を変更するときは新規学習を開始してください。サンプル生成用のflow shiftは別設定です。
+sigmaではWeighting schemeをlogit_normalにします。既存プロジェクトは保存済みのsigma・sigmoid等を維持します。方式を変更するときは新規学習を開始してください。サンプル生成用のflow shiftは別設定です。
 
 ## 再開・追加学習
 

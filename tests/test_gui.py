@@ -48,6 +48,64 @@ class GuiTests(unittest.TestCase):
         self.addCleanup(self.app.destroy)
         self.app.update()
 
+    def test_new_project_defaults_are_16_sigma_2500_without_changing_old_projects(self):
+        fresh = self.app.store.create('New defaults')
+        self.app.load_project(fresh)
+        current = self.app.collect()['settings']
+        self.assertEqual((current['training']['network_dim'], current['training']['network_alpha']), (16, 16))
+        self.assertEqual(current['training']['max_train_steps'], 2500)
+        self.assertEqual(current['training']['save_every_n_steps'], 100)
+        self.assertEqual((current['flow']['timestep_sampling'], current['flow']['discrete_flow_shift']), ('sigma', 1.0))
+        fresh['settings']['training'].update(network_dim=32, network_alpha=32, max_train_steps=2000)
+        fresh['settings']['flow'].update(timestep_sampling='shift', discrete_flow_shift=3.0)
+        self.app.store.save(fresh)
+        old = self.app.store.load(self.app.store.directory(fresh) / 'project.json')
+        self.app.load_project(old)
+        self.assertEqual(self.app.collect()['settings'], fresh['settings'])
+
+    def test_character_lokr_button_applies_and_persists_recipe_without_changing_defaults(self):
+        original_defaults = defaults()
+        self.app.variables[('model', 'vae')].set('C:/existing-vae.safetensors')
+        self.app.variables[('training', 'max_train_steps')].set('2500')
+        self.app.variables[('training', 'resume')].set('old/state')
+        self.app.variables[('memory', 'backend')].set('kohaku')
+        self.app.character_lokr_button.invoke()
+        self.app.update()
+        self.assertEqual(self.app.character_lokr_button.cget('text'), 'キャラクターLoKr（実験的）')
+        current = self.app.collect()
+        t = current['settings']['training']
+        self.assertEqual((t['network_algo'], t['lokr_factor'], t['kohaku_ema']), ('LoKr', 8, .99))
+        self.assertEqual((t['max_train_steps'], t['resume']), (2500, ''))
+        self.assertEqual(current['settings']['dataset']['resolution'], 512)
+        self.assertEqual(current['settings']['model']['vae'], 'C:/existing-vae.safetensors')
+        self.assertEqual(self.app.project['settings']['training']['network_algo'], 'LoRA')
+        self.assertTrue(self.app.save())
+        loaded = self.app.store.load(self.app.store.directory(self.app.project) / 'project.json')
+        self.assertEqual(loaded['settings'], current['settings'])
+        self.assertEqual(defaults(), original_defaults)
+
+    def test_adapter_and_polynomial_controls_preserve_settings(self):
+        factor = self.app.field_widgets[('training', 'lokr_factor')]
+        power = self.app.field_widgets[('training', 'lr_scheduler_power')]
+        self.assertTrue(factor.instate(['disabled']))
+        self.assertTrue(power.instate(['disabled']))
+        self.app.variables[('training', 'network_algo')].set('LoKr')
+        self.assertFalse(factor.instate(['disabled']))
+        self.app.variables[('training', 'lokr_factor')].set('8')
+        self.app.variables[('training', 'lr_scheduler')].set('polynomial')
+        self.assertFalse(power.instate(['disabled']))
+        self.app.variables[('training', 'lr_scheduler_power')].set('2')
+        self.app.variables[('memory', 'backend')].set('kohaku')
+        self.assertTrue(self.app.save())
+        loaded = self.app.store.load(self.app.store.directory(self.app.project) / 'project.json')
+        self.app.load_project(loaded)
+        t = self.app.collect()['settings']['training']
+        self.assertEqual((t['network_algo'], t['lokr_factor'], t['lr_scheduler_power']), ('LoKr', 8, 2.0))
+        self.app.variables[('training', 'network_algo')].set('LoHa')
+        self.app.variables[('training', 'lr_scheduler')].set('cosine')
+        self.assertTrue(factor.instate(['disabled']))
+        self.assertTrue(power.instate(['disabled']))
+
     def test_restart_cycle_field_only_enabled_for_restart_scheduler(self):
         cycles = self.app.field_widgets[('training', 'lr_scheduler_num_cycles')]
         self.assertTrue(cycles.instate(['disabled']))
@@ -282,7 +340,7 @@ class GuiTests(unittest.TestCase):
         dialog = ProjectDialog(self.app)
         dialog.name.set('デフォルト新規')
         dialog.create()
-        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 32)
+        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 16)
         self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
 
     def test_busy_locks_project_controls(self):

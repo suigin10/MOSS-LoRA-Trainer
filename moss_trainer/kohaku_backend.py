@@ -36,7 +36,7 @@ def problems(project):
     need(t['max_train_steps'] > 0, tr('Kohaku: STEP数を指定してください。Epoch指定には未対応です。'))
     need(not t['network_weights'], tr('Kohaku: 初期LoRA重みには未対応です。Kohakuのcheckpointから再開してください。'))
     need(t['optimizer_type'] in ('AdamW', 'AdamW8bit', 'CAME'), tr('Kohaku: OptimizerはAdamW・AdamW8bit・CAMEから選択してください。'))
-    need(t['lr_scheduler'] in ('constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear'), tr('Kohaku: Schedulerの設定を確認してください。'))
+    need(t['lr_scheduler'] in ('constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear', 'polynomial'), tr('Kohaku: Schedulerの設定を確認してください。'))
     need(t['save_every_n_epochs'] == 0, tr('Kohaku: 保存間隔はSTEP数で指定してください。'))
     need(t['save_state'] or t['save_every_n_steps'] == 0,
          tr('Kohaku: STEPごとのLoRA保存にはstate保存もONにしてください。'))
@@ -107,9 +107,11 @@ def knobs(project, run_dir):
     timestep, timestep_kwargs = timestep_knobs(f)
     schedule = {'mode': t['lr_scheduler'].replace('constant_with_warmup', 'constant'),
                 'warmup': t['lr_warmup_steps'] if t['lr_scheduler'] != 'constant' else 0,
-                'end': -1, 'min_value': t.get('kohaku_lr_min_ratio', 0.0) if t['lr_scheduler'] in ('cosine', 'cosine_with_restarts') else 0.0 if t['lr_scheduler'] == 'linear' else 1.0}
+                'end': -1, 'min_value': t.get('kohaku_lr_min_ratio', 0.0) if t['lr_scheduler'] in ('cosine', 'cosine_with_restarts') else 0.0 if t['lr_scheduler'] in ('linear', 'polynomial') else 1.0}
     if t['lr_scheduler'] == 'linear':
         schedule.update(mode='polynomial', power=1)
+    if t['lr_scheduler'] == 'polynomial':
+        schedule['power'] = t.get('lr_scheduler_power', 1.0)
     if t['lr_scheduler'] == 'cosine_with_restarts':
         cycles = t.get('lr_scheduler_num_cycles', 2)
         warmup, total = t['lr_warmup_steps'], t['max_train_steps']
@@ -135,7 +137,8 @@ def knobs(project, run_dir):
         'TEXT_DROP': d['caption_dropout_rate'], 'LATENT_CACHE': 'offline', 'TEXT_CACHE': 'offline',
         'CACHE_DIR': cache_directory(project, run_dir).as_posix(),
         'NUM_WORKERS': m['max_data_loader_n_workers'], 'DATA_SCAN_WORKERS': max(1, m['num_cpu_threads_per_process']),
-        'SEED': t['seed'], 'ALGO': 'lora', 'PRESET': training_preset(t),
+        'SEED': t['seed'], 'ALGO': t.get('network_algo', 'LoRA').lower(),
+        'ALGO_KWARGS': {'factor': t.get('lokr_factor', -1)} if t.get('network_algo') == 'LoKr' else {}, 'PRESET': training_preset(t),
         'DIM': t['network_dim'], 'ALPHA': float(t['network_alpha']),
         'DROPOUT': {'input': 0.0, 'rank': f['rank_dropout'], 'module': f['module_dropout']},
         'TIMESTEP': timestep, 'TIMESTEP_KWARGS': timestep_kwargs,
@@ -164,6 +167,9 @@ def knobs(project, run_dir):
         'FINAL_CHECKPOINT': t['save_state_on_train_end'], 'RESUME': t['resume'],
         'SAVE_FORMAT': 'both', 'CHECKPOINT_EXPORT': True,
     }
+    if t.get('weight_decay', '').strip():
+        out['WEIGHT_DECAY'] = float(t['weight_decay'])
+    out['EMA'] = t.get('kohaku_ema', 0.0)
     return out
 
 
@@ -232,6 +238,10 @@ def state_info(folder):
             for group, values in source['settings'].items():
                 if group not in FIELDS or not isinstance(values, dict) or set(values) - FIELDS[group].keys():
                     raise ValueError('Invalid snapshot settings')
+            if source['settings'].get('training', {}).get('kohaku_ema', 0):
+                ema_file = folder / 'ema.safetensors'
+                if not ema_file.is_file() or ema_file.stat().st_size == 0:
+                    raise ValueError('Missing checkpoint file: ema.safetensors')
             info['snapshot'] = source
     except (OSError, ValueError, KeyError, TypeError) as exc:
         info['errors'].append(tr('Kohaku: checkpointを読めません: {p0}', p0=exc))

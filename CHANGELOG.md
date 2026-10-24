@@ -1,5 +1,15 @@
 # 変更履歴
 
+## 0.2.3 — 2026-10-25
+
+- 新規初期値をRank / Alpha 16 / 16、sigma・学習用flow shift 1.0、2500STEPへ変更。100STEP保存・保存済み設定は維持。
+
+- Weight decayとKohaku専用EMA decayを追加。EMA有効時は通常版とは別の平均化重みを出力。「キャラクターLoKr」プリセットで記事の対応設定を一括適用。機能・設定値が実験的であることをUI・ガイドへ明記。
+
+- Kohaku / sd-scriptsの学習方式にLoRA・LoKr・LoHa選択とLoKr factorを追加。既存設定はLoRAを維持。
+- 両エンジンにpolynomial Schedulerとpowerを追加。既定のcosineを維持。
+- 方式・factor・powerのstate再開チェック、設定の保存・プレビュー・出力、日本語・英語のガイドを更新。
+
 ## 0.2.2 — 2026-10-24
 
 - かんたん導入にsd-scripts用xFormers / Flash Attentionの任意導入を追加。初期状態は両方OFF。対応xFormersの自動選択、Flash Attentionのローカルwheel指定、導入後のGPU順伝播・逆伝播検証に対応。Attentionの選択値は維持。

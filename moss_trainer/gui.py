@@ -19,7 +19,7 @@ from uuid import uuid4
 
 from .backends import backend, selected_environment, source_dir, environment_valid
 from .icons import load as load_icons, decorate as decorate_icons
-from .core import (FIELDS, ENV_DEFAULTS, ProjectStore, Runner, apply_preset, atomic_json,
+from .core import (FIELDS, ENV_DEFAULTS, ProjectStore, Runner, apply_preset, apply_character_lokr_preset, atomic_json,
                    command, dataset_config, dataset_report, defaults, dump_toml, probe,
                    probe_errors, sample_prompts_text, state_info, discover_states,
                    resume_differences, training_config, validate, write_run)
@@ -143,8 +143,10 @@ class ImportDialog(tk.Toplevel):
             m['split_attn'] = True
         t = source['settings']['training']
         limit = f'{t["max_train_steps"]} STEP' if t['max_train_steps'] else tr('{p0} エポック', p0=t['max_train_epochs'])
-        lines = [tr('学習上限: {p0}', p0=limit), tr('学習率: {p0} / Rank: {p1} / Alpha: {p2}', p0=t['learning_rate'], p1=t['network_dim'], p2=alpha_text(t['network_alpha'])),
+        lines = [tr('学習方式: {p0}', p0=t.get('network_algo', 'LoRA')), tr('学習上限: {p0}', p0=limit), tr('学習率: {p0} / Rank: {p1} / Alpha: {p2}', p0=t['learning_rate'], p1=t['network_dim'], p2=alpha_text(t['network_alpha'])),
                  tr('出力 LoRA 名: {p0}', p0=t['output_name']), tr('画像サブセット: {p0} 件', p0=len(source['subsets'])), '', tr('モデル・画像パス:')]
+        if t.get('network_algo') == 'LoKr':
+            lines.insert(1, f"LoKr factor: {t.get('lokr_factor', -1)}")
         for key in ('pretrained_model_name_or_path', 'text_encoder', 'vae'):
             value = source['settings']['model'][key]
             lines.append('  {}: {}'.format(tr(FIELDS['model'][key][0]), value or tr('（未指定）')))
@@ -485,7 +487,12 @@ class App(tk.Tk):
                 ttk.Button(resumebar, text=tr('stateから再開・追加学習…'), command=self.resume_dialog).pack(side='left')
                 ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
                 ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値100 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
-                row = 2
+                recipebar = ttk.Frame(page.body)
+                recipebar.grid(row=2, column=0, columnspan=3, sticky='ew', pady=(0, 12))
+                self.character_lokr_button = ttk.Button(recipebar, text=tr('キャラクターLoKr（実験的）'), command=self.set_character_lokr_preset)
+                self.character_lokr_button.pack(side='left')
+                ttk.Label(recipebar, text=tr('機能・設定値は実験的です。LoKr factor 8 / 512px / batch 2 × 勾配累積 2'), style='Hint.TLabel', wraplength=620).pack(side='left', padx=8)
+                row = 3
             elif group == 'memory':
                 presets = ttk.Frame(page.body)
                 presets.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 12))
@@ -504,6 +511,7 @@ class App(tk.Tk):
         for key in ('attn_mode', 'split_attn'):
             self.variables[('memory', key)].trace_add('write', lambda *args: self.sync_attention())
         self.variables[('memory', 'backend')].trace_add('write', lambda *args: self.sync_kohaku_target())
+        self.variables[('training', 'network_algo')].trace_add('write', lambda *args: self.sync_network_algo())
         self.variables[('training', 'lr_scheduler')].trace_add('write', lambda *args: self.sync_scheduler())
         self.build_monitor()
         timingbar = ttk.Frame(self, padding=(24, 8, 24, 0))
@@ -664,6 +672,7 @@ class App(tk.Tk):
         self.sync_attention()
         self.sync_kohaku_target()
         self.sync_scheduler()
+        self.sync_network_algo()
         for (group, key), widget in self.texts.items():
             widget.delete('1.0', 'end')
             widget.insert('1.0', project['settings'][group][key])
@@ -707,11 +716,19 @@ class App(tk.Tk):
             result['subsets'].append({'image_dir': path.get().strip(), 'num_repeats': count, 'class_tokens': tokens.get()})
         return result
 
+    def sync_network_algo(self):
+        self.field_widgets[('training', 'lokr_factor')].configure(
+            state='normal' if self.variables[('training', 'network_algo')].get() == 'LoKr' else 'disabled')
+
     def sync_scheduler(self):
+        self.field_widgets[('training', 'lr_scheduler_power')].configure(
+            state='normal' if self.variables[('training', 'lr_scheduler')].get() == 'polynomial' else 'disabled')
         self.field_widgets[('training', 'lr_scheduler_num_cycles')].configure(
             state='normal' if self.variables[('training', 'lr_scheduler')].get() == 'cosine_with_restarts' else 'disabled')
 
     def sync_kohaku_target(self):
+        self.field_widgets[('training', 'kohaku_ema')].configure(
+            state='normal' if self.variables[('memory', 'backend')].get() == 'kohaku' else 'disabled')
         self.field_widgets[('training', 'kohaku_train_target')].configure(
             state='readonly' if self.variables[('memory', 'backend')].get() == 'kohaku' else 'disabled')
 
@@ -785,6 +802,13 @@ class App(tk.Tk):
             self.status.set(tr('プロジェクトを削除済みフォルダへ移動しました: {p0}', p0=destination))
         except (ValueError, OSError) as exc:
             messagebox.showerror(tr('プロジェクトを削除できません'), str(exc), parent=self)
+
+    def set_character_lokr_preset(self):
+        settings = defaults()
+        for group, values in apply_character_lokr_preset(settings).items():
+            for key, value in values.items():
+                self.variables[(group, key)].set(value)
+        self.status.set(tr('キャラクターLoKrを適用しました（未保存）'))
 
     def set_preset(self, name):
         s = defaults()

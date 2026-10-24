@@ -917,7 +917,7 @@ class App(tk.Tk):
         ttk.Button(body, text=tr('参照…'), command=lambda: self.browse(base, 'file')).grid(row=2, column=2, padx=6)
         ttk.Label(body, text='PyTorch / CUDA').grid(row=3, column=0, sticky='w', pady=8)
         ttk.Combobox(body, textvariable=profile, values=['cu128', 'cu124', 'cu130'], state='readonly').grid(row=3, column=1, sticky='w')
-        ttk.Label(body, text=tr('初回は専用 venv を新規作成。再実行時は同じ専用環境を確認・修復します。\n作成用 Python は空欄で 3.12 / 3.11 を自動検出。他の用途の venv は流用しません。\ncu128: PyTorch 2.8 / CUDA 12.8（標準）\u3000cu124: PyTorch 2.6 / CUDA 12.4\nインターネット接続と数GB以上の空き容量が必要です。モデル本体は別途選択します。\n再実行時は同じ導入先を指定してください。成功後に GUI の参照先を登録します。'), style='Hint.TLabel', wraplength=730).grid(row=4, column=0, columnspan=3, sticky='w', pady=16)
+        ttk.Label(body, text=tr('作成用 Python は空欄で 3.12 / 3.11 を自動検出します。\ncu128: PyTorch 2.8 / CUDA 12.8\u3000cu124: PyTorch 2.6 / CUDA 12.4\n専用環境へ導入します。モデルは別途選択してください。'), style='Hint.TLabel', wraplength=730).grid(row=4, column=0, columnspan=3, sticky='w', pady=8)
         ttk.Label(body, text=tr('学習エンジン')).grid(row=5, column=0, sticky='w', pady=8)
         selector = ttk.Combobox(body, textvariable=engine, values=['sd-scripts', 'kohaku'], state='readonly')
         selector.grid(row=5, column=1, sticky='w')

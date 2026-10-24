@@ -495,5 +495,6 @@
   "xFormersを導入（対応版を自動選択）": "Install xFormers (select a compatible version automatically)",
   "Flash Attentionを導入（対応wheelを指定）": "Install Flash Attention (select a compatible wheel)",
   "通常は標準のtorch SDPAを使用します。両方とも任意で、導入してもAttention設定は変えません。\nFlash AttentionのwheelはPython・PyTorch・CUDA・GPUに対応するものを指定してください。導入後にGPUの順伝播・逆伝播を検証します。": "Use the standard torch SDPA normally. Both packages are optional and installation does not change the attention setting.\nChoose a Flash Attention wheel matching Python, PyTorch, CUDA and GPU. GPU forward and backward passes are checked after installation.",
-  "Flash Attentionの対応wheelを指定してください。": "Select a compatible Flash Attention wheel."
+  "Flash Attentionの対応wheelを指定してください。": "Select a compatible Flash Attention wheel.",
+  "作成用 Python は空欄で 3.12 / 3.11 を自動検出します。\ncu128: PyTorch 2.8 / CUDA 12.8　cu124: PyTorch 2.6 / CUDA 12.4\n専用環境へ導入します。モデルは別途選択してください。": "Leave the base Python blank to detect Python 3.12 / 3.11 automatically.\ncu128: PyTorch 2.8 / CUDA 12.8; cu124: PyTorch 2.6 / CUDA 12.4.\nPackages are installed in a dedicated environment. Select model files separately."
 }

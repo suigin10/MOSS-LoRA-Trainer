@@ -1,5 +1,7 @@
 # MOSS LoRA Trainer with Kohaku 利用ガイド
 
+起動時は最後に開いたプロジェクトを復元します。対象がない場合はデフォルト設定の新規プロジェクトを作成します。
+
 MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 3.11 以上で `Start MOSS LoRA Trainer.bat` をダブルクリックして起動します。GUI 自体に追加の pip パッケージは不要です（tkinter が必要）。学習環境は「かんたん導入」で作成できます。モデルファイルは別途用意してください。
 
 対象GPUは CUDA / bf16 対応の NVIDIA ビデオカードです。推奨設定は特定の機種名ではなく、VRAM容量別に用意しています。新規プロジェクトのエンジンはKohakuです。初期値は VRAM 12GB のビデオカード向けで、16GB・24GB以上のプリセットも選べます。

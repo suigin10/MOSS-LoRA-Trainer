@@ -11,6 +11,32 @@ from moss_trainer.core import atomic_json, defaults
 
 
 class GuiTests(unittest.TestCase):
+    def test_restart_restores_last_project_by_id_after_rename(self):
+        other = self.app.store.create('Last project')
+        self.app.refresh_projects(other['id'])
+        other['name'] = 'Renamed project'
+        self.app.store.save(other)
+        reopened = App(self.app.data_dir)
+        try:
+            self.assertEqual(reopened.project['id'], other['id'])
+            self.assertEqual(reopened.project_combo.get(), 'Renamed project')
+        finally:
+            reopened.destroy()
+
+    def test_restart_creates_default_project_when_last_project_is_missing(self):
+        original_id = self.app.project['id']
+        self.app.store.create('新しいプロジェクト')
+        self.app.preferences['last_project_id'] = 'missing-project'
+        self.app.save_ui_preferences()
+        reopened = App(self.app.data_dir)
+        try:
+            self.assertNotEqual(reopened.project['id'], original_id)
+            self.assertEqual(reopened.project['name'], '新しいプロジェクト (2)')
+            self.assertEqual(reopened.project['settings'], defaults())
+            self.assertEqual(reopened.preferences['last_project_id'], reopened.project['id'])
+        finally:
+            reopened.destroy()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=os.environ.get('MOSS_TEST_TMP'))
         self.addCleanup(self.temp.cleanup)
@@ -308,7 +334,7 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(len(self.app.store.list()), 1)
         self.assertTrue(self.app.delete_button.instate(['disabled']))
 
-    def test_empty_project_list_stays_empty_after_restart_and_language_change(self):
+    def test_empty_project_list_creates_defaults_on_restart(self):
         with patch('moss_trainer.gui.messagebox.askyesno', return_value=True):
             self.app.delete_project()
         self.app.language_choice.set('English')
@@ -316,8 +342,9 @@ class GuiTests(unittest.TestCase):
         self.assertIsNone(self.app.project)
         restarted = App(self.app.data_dir)
         try:
-            self.assertIsNone(restarted.project)
-            self.assertEqual(restarted.store.list(), [])
+            self.assertIsNotNone(restarted.project)
+            self.assertEqual(restarted.project['settings'], defaults())
+            self.assertEqual(len(restarted.store.list()), 1)
         finally:
             restarted.destroy()
 

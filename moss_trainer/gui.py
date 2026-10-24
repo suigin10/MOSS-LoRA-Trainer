@@ -36,7 +36,7 @@ def alpha_text(value):
 class ScrollPage(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.canvas = tk.Canvas(self, highlightthickness=0, bg='#f1f6f8')
+        self.canvas = tk.Canvas(self, highlightthickness=0, bg='#faf6ed')
         bar = ttk.Scrollbar(self, orient='vertical', command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=bar.set)
         bar.pack(side='right', fill='y')
@@ -160,7 +160,7 @@ class ImportDialog(tk.Toplevel):
         issues = validate(preview)
         if issues:
             lines.extend(['', tr('読み込み後に確認する項目:')] + ['  ' + issue for issue in issues])
-        text = tk.Text(body, height=12, bg='#ffffff', fg='#173746', font=('Consolas', 10), wrap='word', relief='flat', padx=10, pady=10)
+        text = tk.Text(body, height=12, bg='#ffffff', fg='#3f3021', font=('Consolas', 10), wrap='word', relief='flat', padx=10, pady=10)
         text.pack(fill='both', expand=True)
         text.insert('1.0', '\n'.join(lines))
         text.configure(state='disabled')
@@ -316,7 +316,7 @@ class App(tk.Tk):
         initial_height = min(880, max(480, self.winfo_screenheight() - 100))
         self.geometry(f'1220x{initial_height}')
         self.minsize(1000, min(700, initial_height))
-        self.configure(bg='#f1f6f8')
+        self.configure(bg='#faf6ed')
         self.data_dir = Path(data_dir or os.environ.get('MOSS_TRAINER_DATA', APP_DIR / 'data')).resolve()
         self.store = ProjectStore(self.data_dir / 'projects')
         env_file = self.data_dir / 'environment.json'
@@ -353,9 +353,18 @@ class App(tk.Tk):
         self.project = None
         self.style_ui()
         self.build()
-        if not self.store.list() and not self.preferences.get('empty_projects', False):
-            self.store.create(tr('はじめてのプロジェクト'))
-        self.refresh_projects()
+        projects = self.store.list()
+        last_project_id = self.preferences.get('last_project_id')
+        if not any(p['id'] == last_project_id for p in projects):
+            base_name = tr('新しいプロジェクト') if projects or last_project_id else tr('はじめてのプロジェクト')
+            name, number = base_name, 2
+            names = {p['name'].casefold() for p in projects}
+            while name.casefold() in names:
+                name = f'{base_name} ({number})'
+                number += 1
+            project = self.store.create(name)
+            last_project_id = project['id']
+        self.refresh_projects(last_project_id)
         self.poll_id = self.after(150, self.poll)
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.bind_all('<Control-s>', lambda e: self.save())
@@ -368,56 +377,56 @@ class App(tk.Tk):
     def style_ui(self):
         style = ttk.Style(self)
         style.theme_use('clam')
-        style.configure('.', font=('Yu Gothic UI', 10), background='#f1f6f8', foreground='#173746')
-        style.configure('Header.TFrame', background='#123342')
-        style.configure('HeaderTitle.TLabel', background='#123342', foreground='#ffffff', font=('Yu Gothic UI', 20, 'bold'))
-        style.configure('HeaderSubtitle.TLabel', background='#123342', foreground='#c1e2e5', font=('Yu Gothic UI', 11))
-        style.configure('TButton', padding=(12, 7), background='#e1f2f0', foreground='#124b48',
-                        bordercolor='#78aaa4', lightcolor='#e1f2f0', darkcolor='#78aaa4', focuscolor='#137b68')
-        style.map('TButton', background=[('disabled', '#e2e7eb'), ('pressed', '#b4dcd5'), ('active', '#c9e8e2')],
-                  foreground=[('disabled', '#7a8791')], bordercolor=[('disabled', '#cbd4da'), ('focus', '#137b68')])
-        style.configure('Header.TButton', background='#254f60', foreground='#ffffff', bordercolor='#678d9c', lightcolor='#254f60', darkcolor='#254f60')
-        style.map('Header.TButton', background=[('disabled', '#536874'), ('pressed', '#326d7c'), ('active', '#326d7c')], foreground=[('disabled', '#b1c1c8')])
-        style.configure('Accent.TButton', background='#137b68', foreground='white')
-        style.map('Accent.TButton', background=[('disabled', '#dce4e8'), ('pressed', '#095343'), ('active', '#0d6656')], foreground=[('disabled', '#7a8791')])
+        style.configure('.', font=('Yu Gothic UI', 10), background='#faf6ed', foreground='#3f3021')
+        style.configure('Header.TFrame', background='#3b291b')
+        style.configure('HeaderTitle.TLabel', background='#3b291b', foreground='#ffffff', font=('Yu Gothic UI', 20, 'bold'))
+        style.configure('HeaderSubtitle.TLabel', background='#3b291b', foreground='#ead5ae', font=('Yu Gothic UI', 11))
+        style.configure('TButton', padding=(12, 7), background='#f5e8cb', foreground='#654318',
+                        bordercolor='#c6a56a', lightcolor='#f5e8cb', darkcolor='#c6a56a', focuscolor='#9a5b12')
+        style.map('TButton', background=[('disabled', '#e9e4da'), ('pressed', '#e5c487'), ('active', '#efdaaf')],
+                  foreground=[('disabled', '#8a8174')], bordercolor=[('disabled', '#d7cdbd'), ('focus', '#9a5b12')])
+        style.configure('Header.TButton', background='#604326', foreground='#ffffff', bordercolor='#ad8955', lightcolor='#604326', darkcolor='#604326')
+        style.map('Header.TButton', background=[('disabled', '#776650'), ('pressed', '#805b2d'), ('active', '#805b2d')], foreground=[('disabled', '#cbbda6')])
+        style.configure('Accent.TButton', background='#9a5b12', foreground='white')
+        style.map('Accent.TButton', background=[('disabled', '#e9e2d4'), ('pressed', '#683c0b'), ('active', '#7c480e')], foreground=[('disabled', '#8a8174')])
         # Combobox "readonly" means selectable, not disabled. Give it an enabled color.
-        style.configure('TEntry', fieldbackground='#ffffff', foreground='#173746', bordercolor='#96b8c3',
-                        lightcolor='#ffffff', darkcolor='#96b8c3', padding=6, insertcolor='#137b68')
-        style.map('TEntry', fieldbackground=[('disabled', '#e2e7eb'), ('readonly', '#eaf6f4')],
-                  foreground=[('disabled', '#7a8791')], bordercolor=[('disabled', '#cbd4da'), ('focus', '#137b68')])
-        style.configure('TCombobox', fieldbackground='#e6f5f1', background='#d3ebe5', foreground='#124b48',
-                        arrowcolor='#116554', bordercolor='#66a99a', lightcolor='#e6f5f1', darkcolor='#66a99a', padding=6)
-        style.map('TCombobox', fieldbackground=[('disabled', '#e2e7eb'), ('readonly', '#e6f5f1')],
-                  background=[('disabled', '#e2e7eb'), ('active', '#bfe1d7'), ('readonly', '#d3ebe5')],
-                  foreground=[('disabled', '#7a8791'), ('readonly', '#124b48')],
-                  arrowcolor=[('disabled', '#8a969d'), ('readonly', '#116554')],
-                  bordercolor=[('disabled', '#cbd4da'), ('focus', '#137b68')],
-                  selectbackground=[('readonly', '#c6e8df')], selectforeground=[('readonly', '#124b48')])
+        style.configure('TEntry', fieldbackground='#ffffff', foreground='#3f3021', bordercolor='#c6ad83',
+                        lightcolor='#ffffff', darkcolor='#c6ad83', padding=6, insertcolor='#9a5b12')
+        style.map('TEntry', fieldbackground=[('disabled', '#e9e4da'), ('readonly', '#fbf0d9')],
+                  foreground=[('disabled', '#8a8174')], bordercolor=[('disabled', '#d7cdbd'), ('focus', '#9a5b12')])
+        style.configure('TCombobox', fieldbackground='#fcf1db', background='#f0ddb5', foreground='#654318',
+                        arrowcolor='#805014', bordercolor='#bf9a5a', lightcolor='#fcf1db', darkcolor='#bf9a5a', padding=6)
+        style.map('TCombobox', fieldbackground=[('disabled', '#e9e4da'), ('readonly', '#fcf1db')],
+                  background=[('disabled', '#e9e4da'), ('active', '#e8cb91'), ('readonly', '#f0ddb5')],
+                  foreground=[('disabled', '#8a8174'), ('readonly', '#654318')],
+                  arrowcolor=[('disabled', '#948978'), ('readonly', '#805014')],
+                  bordercolor=[('disabled', '#d7cdbd'), ('focus', '#9a5b12')],
+                  selectbackground=[('readonly', '#efd49c')], selectforeground=[('readonly', '#654318')])
         self.option_add('*TCombobox*Listbox.background', '#ffffff')
-        self.option_add('*TCombobox*Listbox.foreground', '#173746')
-        self.option_add('*TCombobox*Listbox.selectBackground', '#137b68')
+        self.option_add('*TCombobox*Listbox.foreground', '#3f3021')
+        self.option_add('*TCombobox*Listbox.selectBackground', '#9a5b12')
         self.option_add('*TCombobox*Listbox.selectForeground', '#ffffff')
         style.configure('Title.TLabel', font=('Yu Gothic UI', 18, 'bold'))
-        style.configure('Subtitle.TLabel', font=('Yu Gothic UI', 11), foreground='#536875')
-        style.configure('Hint.TLabel', font=('Yu Gothic UI', 9), foreground='#627684')
-        style.configure('TNotebook', background='#f1f6f8', bordercolor='#bbd1d9')
-        style.configure('TNotebook.Tab', padding=(13, 10), background='#dfecef', foreground='#315667')
-        style.map('TNotebook.Tab', background=[('selected', '#137b68'), ('active', '#c9e8e2')],
+        style.configure('Subtitle.TLabel', font=('Yu Gothic UI', 11), foreground='#736149')
+        style.configure('Hint.TLabel', font=('Yu Gothic UI', 9), foreground='#7a684e')
+        style.configure('TNotebook', background='#faf6ed', bordercolor='#d9c8aa')
+        style.configure('TNotebook.Tab', padding=(13, 10), background='#f0e5d1', foreground='#6e502b')
+        style.map('TNotebook.Tab', background=[('selected', '#9a5b12'), ('active', '#efdaaf')],
                   foreground=[('selected', '#ffffff')],
                   padding=[('selected', (17, 12)), ('!selected', (13, 8))],
                   font=[('selected', ('Yu Gothic UI', 10, 'bold')), ('!selected', ('Yu Gothic UI', 10))])
-        style.configure('TLabelframe', padding=10, bordercolor='#bbd1d9')
-        style.configure('TLabelframe.Label', foreground='#176d60', font=('Yu Gothic UI', 10, 'bold'))
+        style.configure('TLabelframe', padding=10, bordercolor='#d9c8aa')
+        style.configure('TLabelframe.Label', foreground='#8a5313', font=('Yu Gothic UI', 10, 'bold'))
         for widget in ('TCheckbutton', 'TRadiobutton'):
             style.configure(widget, padding=4, indicatorbackground='#ffffff', indicatorforeground='#ffffff', indicatorcolor='#ffffff')
-            style.map(widget, foreground=[('disabled', '#7a8791')],
-                      indicatorbackground=[('disabled', '#e2e7eb'), ('selected', '#137b68'), ('active', '#d3ebe5')],
-                      indicatorcolor=[('disabled', '#e2e7eb'), ('selected', '#137b68')])
-        style.configure('Treeview', background='#ffffff', fieldbackground='#ffffff', foreground='#173746', rowheight=28)
-        style.map('Treeview', background=[('selected', '#137b68')], foreground=[('selected', '#ffffff')])
-        style.configure('Treeview.Heading', background='#dfecef', foreground='#234f60', padding=6)
-        style.configure('Horizontal.TProgressbar', background='#137b68', troughcolor='#dfecef', bordercolor='#bbd1d9')
-        style.configure('Vertical.TScrollbar', background='#c5dce0', troughcolor='#edf3f5', arrowcolor='#315667')
+            style.map(widget, foreground=[('disabled', '#8a8174')],
+                      indicatorbackground=[('disabled', '#e9e4da'), ('selected', '#9a5b12'), ('active', '#f0ddb5')],
+                      indicatorcolor=[('disabled', '#e9e4da'), ('selected', '#9a5b12')])
+        style.configure('Treeview', background='#ffffff', fieldbackground='#ffffff', foreground='#3f3021', rowheight=28)
+        style.map('Treeview', background=[('selected', '#9a5b12')], foreground=[('selected', '#ffffff')])
+        style.configure('Treeview.Heading', background='#f0e5d1', foreground='#624421', padding=6)
+        style.configure('Horizontal.TProgressbar', background='#9a5b12', troughcolor='#f0e5d1', bordercolor='#d9c8aa')
+        style.configure('Vertical.TScrollbar', background='#dcc7a0', troughcolor='#f5ecdc', arrowcolor='#6e502b')
 
     def build(self):
         self.columnconfigure(0, weight=1)
@@ -523,9 +532,9 @@ class App(tk.Tk):
         box.columnconfigure(1, weight=1)
         ttk.Label(box, text=label, width=31).grid(row=0, column=0, sticky='nw', pady=5)
         if choices == 'multiline':
-            widget = tk.Text(box, height=4, wrap='word', font=('Consolas', 10), bg='#ffffff', fg='#173746',
-                             insertbackground='#137b68', selectbackground='#c6e8df', selectforeground='#124b48',
-                             relief='flat', bd=0, highlightthickness=1, highlightbackground='#96b8c3', highlightcolor='#137b68', padx=7, pady=5)
+            widget = tk.Text(box, height=4, wrap='word', font=('Consolas', 10), bg='#ffffff', fg='#3f3021',
+                             insertbackground='#9a5b12', selectbackground='#efd49c', selectforeground='#654318',
+                             relief='flat', bd=0, highlightthickness=1, highlightbackground='#c6ad83', highlightcolor='#9a5b12', padx=7, pady=5)
             widget.grid(row=0, column=1, columnspan=2, sticky='ew')
             self.texts[(group, key)] = widget
         else:
@@ -605,8 +614,8 @@ class App(tk.Tk):
         self.vram_text = tk.StringVar(value=tr('VRAM（GPU全体・専用メモリ）: 学習開始後に計測'))
         self.progress = ttk.Progressbar(page, mode='indeterminate')
         self.progress.pack(fill='x', pady=(0, 8))
-        self.log = tk.Text(page, bg='#122d3b', fg='#d8eee7', insertbackground='white', font=('Consolas', 10), wrap='word', state='disabled',
-                           relief='flat', bd=0, padx=12, pady=10, selectbackground='#326d7c', selectforeground='#ffffff')
+        self.log = tk.Text(page, bg='#30251b', fg='#f4e5c6', insertbackground='white', font=('Consolas', 10), wrap='word', state='disabled',
+                           relief='flat', bd=0, padx=12, pady=10, selectbackground='#805b2d', selectforeground='#ffffff')
         scroll = ttk.Scrollbar(page, command=self.log.yview)
         self.log.configure(yscrollcommand=scroll.set)
         scroll.pack(side='right', fill='y')
@@ -624,6 +633,8 @@ class App(tk.Tk):
 
     def clear_project(self):
         self.project = self.saved_snapshot = None
+        if self.preferences.pop('last_project_id', None) is not None:
+            self.save_ui_preferences()
         self.project_combo.set('')
         self.project_combo.configure(state='disabled')
         self.start_button.configure(state='disabled')
@@ -669,6 +680,9 @@ class App(tk.Tk):
         self.progress.configure(mode='indeterminate', value=0)
         self.progress_text.set(tr('学習待機中'))
         self.status.set(tr('{p0}  /  待機中', p0=project['name']))
+        if self.preferences.get('last_project_id') != project['id']:
+            self.preferences['last_project_id'] = project['id']
+            self.save_ui_preferences()
 
     def collect(self):
         if self.project is None:
@@ -1078,7 +1092,7 @@ class App(tk.Tk):
         dialog.geometry('900x620')
         frame = ttk.Frame(dialog, padding=12)
         frame.pack(fill='both', expand=True)
-        widget = tk.Text(frame, wrap='word', font=('Consolas', 10), bg='#ffffff', fg='#173746', selectbackground='#c6e8df', selectforeground='#124b48', relief='flat', padx=10, pady=10)
+        widget = tk.Text(frame, wrap='word', font=('Consolas', 10), bg='#ffffff', fg='#3f3021', selectbackground='#efd49c', selectforeground='#654318', relief='flat', padx=10, pady=10)
         bar = ttk.Scrollbar(frame, command=widget.yview)
         widget.configure(yscrollcommand=bar.set)
         bar.pack(side='right', fill='y')

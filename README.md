@@ -1,6 +1,10 @@
 # MOSS LoRA Trainer with Kohaku v0.2.2
 
-Windows向けのMOSS-Image LoRA学習GUIです。Kohaku / sd-scriptsの専用環境導入、プロジェクト管理、キャッシュ、学習・追加学習、ログ表示に対応します。新規プロジェクトはKohakuを使用します。既存プロジェクトのエンジンと保存設定は維持します。
+![琥珀色UI・学習設定画面](docs/images/amber-ui.png)
+
+起動時は最後に開いたプロジェクトを復元します。
+
+Windows向けのMOSS-Image LoRA学習GUIです。琥珀色を基調にした日本語／英語UIを備えています。Kohaku / sd-scriptsの専用環境導入、プロジェクト管理、キャッシュ、学習・追加学習、ログ表示に対応します。新規プロジェクトはKohakuを使用します。既存プロジェクトのエンジンと保存設定は維持します。
 
 Japanese / English desktop GUI for MOSS-Image LoRA training. Switch to English in the header. See the [English quick start](docs/QUICK_START.en.md).
 

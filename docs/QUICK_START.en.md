@@ -1,5 +1,7 @@
 # MOSS LoRA Trainer with Kohaku v0.2.2
 
+The app reopens the last selected project on startup. If it no longer exists, a new project is created with default settings.
+
 Windows GUI for MOSS-Image LoRA training with Kohaku and sd-scripts. New projects use Kohaku. Saved projects keep their engine and settings.
 
 ## Install and update

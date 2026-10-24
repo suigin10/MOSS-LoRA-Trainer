@@ -43,7 +43,7 @@ class KohakuTests(unittest.TestCase):
         self.assertEqual((values['DIM'], values['ALPHA']), (32, 32.0))
         self.assertEqual(values['OPTIMIZER'], 'adamw')
         self.assertEqual(values['MEMORY_OVERRIDES'], {})
-        self.assertEqual(values['LR'], 5e-5)
+        self.assertEqual(values['LR'], 1e-4)
         self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
         self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (2000, 100, 0.1))
         self.assertEqual(values['PRESET'], {'target_name': [r'layers\.\d+\.proj\.ffn_down$']})

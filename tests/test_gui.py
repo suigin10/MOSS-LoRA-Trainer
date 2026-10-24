@@ -276,7 +276,7 @@ class GuiTests(unittest.TestCase):
         project = self.app.collect()
         self.assertEqual(project['settings']['model']['vae'], 'D:/models/vae.safetensors')
         self.assertEqual(project['settings']['model']['text_encoder'], 'D:/models/qwen.safetensors')
-        self.assertEqual(project['settings']['training']['learning_rate'], 0.00005)
+        self.assertEqual(project['settings']['training']['learning_rate'], 0.0001)
         self.assertEqual(project['subsets'][0]['image_dir'], '')
 
     def test_delete_last_project_and_add_again_with_models_retained(self):

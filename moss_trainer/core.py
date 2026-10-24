@@ -48,7 +48,7 @@ FIELDS = {
         'network_dim': ('Rank / dim', 32, None, 'Kohaku公式LoRA初期値32。sd-scriptsの開始値は設定ガイドを参照'),
         'network_alpha': ('Alpha', 32.0, None, 'Kohaku公式LoRA初期値32。Rank・Alphaはstate再開時に変更できません'),
         'kohaku_train_target': ('Kohaku: 学習対象', 'ffn-down', ['ffn-down', 'attn-mlp', 'attn'], 'ffn-down: FFN_downのみ / attn-mlp: Attention＋FFN / attn: Attentionのみ。対象を変更するときは新規学習してください'),
-        'learning_rate': ('学習率', 0.00005, None, '固定の最適値ではありません。データセットに応じて調整'),
+        'learning_rate': ('学習率', 0.0001, None, '固定の最適値ではありません。データセットに応じて調整'),
         'optimizer_type': ('Optimizer', 'AdamW', ['AdamW', 'AdamW8bit', 'CAME', 'Adafactor'], '両エンジンの初期値はAdamW。CAMEは「かんたん導入」で必要パッケージを追加。Adafactorはsd-scripts専用'),
         'lr_scheduler': ('LR scheduler', 'cosine', ['constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear'], '初期値cosine。cosine_with_restartsは周期ごとに学習率を上げ直します。state再開では元の設定を維持'),
         'lr_scheduler_num_cycles': ('Restart周期数', 2, None, 'cosine_with_restarts専用。2は2周期（途中の再スタート1回）。warmupは学習開始時のみ'),

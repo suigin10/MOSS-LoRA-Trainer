@@ -25,7 +25,7 @@ CUDA / bf16対応のNVIDIA GPUが対象です。Kohakuの導入には対応ド�
 
 ## 新規学習の初期値
 
-新規Kohakuは、**FFN_downのみ、Rank/Alpha 32/32、AdamW、学習率5e-5、cosine、warmup 100、最小学習率10%、2000STEP、100STEPごと保存、timestep shift / flow shift 3.0**が初期値です。Caption dropoutは0.1で、自然文キャプションでは0を推奨します。
+新規Kohakuは、**FFN_downのみ、Rank/Alpha 32/32、AdamW、学習率1e-4、cosine、warmup 100、最小学習率10%、2000STEP、100STEPごと保存、timestep shift / flow shift 3.0**が初期値です。Caption dropoutは0.1で、自然文キャプションでは0を推奨します。
 学習対象は「03 学習」でattn-mlp（Attention＋FFN）・attn（Attentionのみ）にも切り替えられます。OptimizerにはAdamW8bit・CAMEも選べます。CAME用パッケージは「かんたん導入」で追加します。
 INT8・ckpt-resident・batch 1・画像＋テキスト上限6144は、このGUIの12GB向け開始設定です。
 Schedulerは通常のcosineが既定です。比較用にcosine_with_restartsも選択でき、初期値は2周期（再スタート1回）です。詳細は設定ガイドを参照してください。
@@ -45,7 +45,7 @@ Kohakuとsd-scriptsのstateは相互利用できません。更新時はアプ�
 
 ## 現在の確認状況
 
-- 利用者のRTX 4070 12GBで、現行デフォルト設定の学習完走を報告いただいています（2026-10-24）。
+- 利用者のRTX 4070 12GBで、v0.2.2公開時のデフォルト設定の学習完走を報告いただいています（2026-10-24）。
 - 過去にはKohakuの4000STEP学習・サンプル生成・最終LoRA出力、両エンジンの1500STEP学習も完走しています。過去の速度値は現行設定と条件が異なります。
 - CAMEと再スタート付きcosineはCPUで更新・state復元を確認しています。GPUでの生成品質比較は未実施です。
 

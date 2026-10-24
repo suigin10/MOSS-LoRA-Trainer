@@ -25,7 +25,7 @@ GPU学習の完走結果は歓迎します。成功条件・モデル・設定�
 
 ### v0.2.2 — 2026-10-24
 
-- 利用者より、RTX 4070 12GBで現行デフォルト設定の学習完走を報告。新規初期値はFFN_downのみ・32/32・AdamW・LR 5e-5・cosine・warmup 100・下限10%・shift 3.0・2000STEP・100STEP保存。現行設定の速度やVRAMの数値は未測定。
+- 利用者より、RTX 4070 12GBでv0.2.2公開時のデフォルト設定の学習完走を報告。当時の初期値はFFN_downのみ・32/32・AdamW・LR 5e-5・cosine・warmup 100・下限10%・shift 3.0・2000STEP・100STEP保存。現行設定の速度やVRAMの数値は未測定。
 - 自動テスト163件成功。学習対象、CAMEと依存チェック、shift、再スタート付きcosine、STEP/Epoch入力、翻訳、旧設定移行と再開差分を確認。
 - 実際のKohaku/LyCORISで小さなCPUモデルを使用し、FFN_down・Attention＋FFN・Attentionの対象層が一致することを確認。
 - Kohakuのshift samplerは4096サンプルでsd-scriptsの計算式と一致。CAMEは実際のoptimizer接続でCPU更新・state復元後の重み一致を確認。

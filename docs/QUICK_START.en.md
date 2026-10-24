@@ -14,7 +14,7 @@ To update, close the app and copy the new application files into its folder. Kee
 
 ## New-project defaults
 
-Kohaku starts with FFN_down only, rank/alpha 32/32, AdamW, LR 5e-5, cosine, 100 warmup steps, a 10% LR floor, **2000 steps and saves every 100 steps**. Caption dropout starts at 0.1; **0 is recommended for natural-language captions**. Timestep sampling is shift with flow shift 3.0 and sigmoid scale 1.0. The 12GB starting memory plan uses INT8 model files, ckpt-resident, batch 1 and 6144 joint image/text tokens. Compilation and training samples start OFF.
+Kohaku starts with FFN_down only, rank/alpha 32/32, AdamW, LR 1e-4, cosine, 100 warmup steps, a 10% LR floor, **2000 steps and saves every 100 steps**. Caption dropout starts at 0.1; **0 is recommended for natural-language captions**. Timestep sampling is shift with flow shift 3.0 and sigmoid scale 1.0. The 12GB starting memory plan uses INT8 model files, ckpt-resident, batch 1 and 6144 joint image/text tokens. Compilation and training samples start OFF.
 
 The new-project step count, save interval, optimizer and scheduler also apply when switching to sd-scripts. Apply the sd-scripts rank, LR and other starting values from the [settings guide](STABLE_SETTINGS.md) manually. Switching engines and updating the app do not reset saved values.
 
@@ -56,6 +56,6 @@ Changing training conditions requires a new run. sd-scripts can use initial LoRA
 
 The footer shows elapsed time, measured average step time, ETA and dedicated GPU memory sampled with nvidia-smi. GPU memory includes other applications. Setup, caching, saving and sampling affect total time. Completion/failure sounds are optional in Run / Log; manual stops are silent. Process logs keep their original language.
 
-The user reported completion with the current defaults on an RTX 4070 12GB on 2026-10-24. Earlier 4000-step Kohaku and 1500-step runs used different settings. CAME updates and restart-scheduler resume were checked on CPU. See [development and verification notes](../CONTRIBUTING.md#検証状況) for scope and historical measurements.
+The user reported completion with the defaults at the initial v0.2.2 publication on an RTX 4070 12GB on 2026-10-24. Earlier 4000-step Kohaku and 1500-step runs used different settings. CAME updates and restart-scheduler resume were checked on CPU. See [development and verification notes](../CONTRIBUTING.md#検証状況) for scope and historical measurements.
 
 KohakuMoss License 1.0 includes an additional naming condition; the product name is **MOSS Studio with Kohaku**. See [third-party notices](../THIRD_PARTY_NOTICES.md) and the bundled license in `licenses/`.

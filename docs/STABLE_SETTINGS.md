@@ -7,7 +7,7 @@
 | 解像度 / Resolution | 1024 | 1024 |
 | Rank / Alpha | 32 / 32 | 16 / 1 |
 | Optimizer | AdamW | AdamW |
-| 学習率 / Learning rate | 0.00005 | 0.0001 |
+| 学習率 / Learning rate | 0.0001 | 0.0001 |
 | Scheduler | cosine | cosine |
 | Warmup | 100 steps | 100 steps |
 | 最小学習率の比率 / Minimum LR ratio | 0.1（初期学習率の10%） | 対象外 |

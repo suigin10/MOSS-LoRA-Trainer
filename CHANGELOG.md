@@ -2,6 +2,8 @@
 
 ## 0.2.2 — 2026-10-24
 
+- 名称をMOSS LoRA Trainer with Kohakuへ統一。UI・起動時エラー・ログ・ドキュメント・配布ZIPを更新し、起動ファイルをStart MOSS LoRA Trainer.batへ変更。
+
 - 公開後の調整: 衣装の学習結果を踏まえ、デフォルト学習率を1e-4へ戻しました。その他の初期値は維持。
 
 - cosine_with_restartsを両エンジンへ追加。初期値2周期、warmupは開始時のみ。通常のcosineを既定に維持し、周期数の入力・出力・state再開の差分チェックに対応。
@@ -36,13 +38,13 @@
 
 ## 0.2.0 — 2026-10-20
 
-- 主要表示名をMOSS Studio with Kohakuに変更。KohakuMossのライセンス本文・通知を収録。
+- 主要表示名をMOSS LoRA Trainer with Kohakuに変更。KohakuMossのライセンス本文・通知を収録。
 - Kohaku専用環境、Tritonの自動導入とGPU診断、キャッシュ、学習、checkpoint再開に対応。
 - 新規プロジェクトのエンジンをKohaku、メモリ構成をckpt-residentへ変更。既存設定は保持。
 - AdamW8bitはGPU状態・非fused更新、自動チューニングOFF。子プロセスはUTF-8で起動。
 - 確認済みGPU AdamW8bit checkpointでは、メモリ構成だけ変更して再開可能。
 - 保存前にLoRA exportを退避し、state整理後もモデル履歴を保持。
-- 起動ファイルをStart MOSS Studio.batへ統一。不要な旧バッチと重複メモを整理。
+- 起動ファイルをStart MOSS LoRA Trainer.batへ統一。不要な旧バッチと重複メモを整理。
 - アプリ・主要操作・タブのアイコンを刷新。
 - 設定表は独立したMarkdownへ移し、GUIには設定ガイドボタンを配置。
 - モデル案内を設定ガイドへ、Kohaku説明を利用ガイドへ、検証記録を開発文書へ統合。

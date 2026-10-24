@@ -101,8 +101,8 @@ def main():
         from moss_trainer.state_retention import install_state_retention
         from library import checkpoint_io
         install_state_retention(checkpoint_io)
-        print('MOSS Studio: keep latest completed state only; LoRA saves are unchanged', flush=True)
-    print('MOSS Studio: cumulative STEP / resume compatibility enabled', flush=True)
+        print('MOSS LoRA Trainer with Kohaku: keep latest completed state only; LoRA saves are unchanged', flush=True)
+    print('MOSS LoRA Trainer with Kohaku: cumulative STEP / resume compatibility enabled', flush=True)
     runpy.run_path(str(backend / 'moss_image_train_network.py'), run_name='__main__')
 
 

@@ -312,7 +312,7 @@ class App(tk.Tk):
     def __init__(self, data_dir=None):
         super().__init__()
         load_icons(self)
-        self.title(f'MOSS Studio with Kohaku v{__version__}')
+        self.title(f'MOSS LoRA Trainer with Kohaku v{__version__}')
         initial_height = min(880, max(480, self.winfo_screenheight() - 100))
         self.geometry(f'1220x{initial_height}')
         self.minsize(1000, min(700, initial_height))
@@ -424,7 +424,7 @@ class App(tk.Tk):
         self.rowconfigure(3, weight=1)
         header = ttk.Frame(self, padding=(24, 16), style='Header.TFrame')
         header.grid(row=0, column=0, sticky='ew')
-        ttk.Label(header, text=f'MOSS Studio with Kohaku v{__version__}', style='HeaderTitle.TLabel').pack(side='left')
+        ttk.Label(header, text=f'MOSS LoRA Trainer with Kohaku v{__version__}', style='HeaderTitle.TLabel').pack(side='left')
         ttk.Button(header, text=tr('実行環境'), style='Header.TButton', command=self.environment).pack(side='right')
         ttk.Button(header, text=tr('かんたん導入'), style='Header.TButton', command=self.setup_dialog).pack(side='right', padx=8)
         self.language_choice = tk.StringVar(value='日本語' if self.language == 'ja' else 'English')
@@ -1140,7 +1140,7 @@ class App(tk.Tk):
         if not self.allow_switch():
             return
         path = filedialog.askopenfilename(parent=self, title=tr('project_snapshot.json または project.json を選択'),
-                                          filetypes=[(tr('MOSS Studio の設定 JSON'), '*.json')])
+                                          filetypes=[(tr('MOSS LoRA Trainer with Kohaku の設定 JSON'), '*.json')])
         if path:
             try:
                 source = self.store.load(path)
@@ -1375,6 +1375,6 @@ def main():
         # pythonw has no console: always present startup failures to the user.
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror(tr('MOSS Studio — 起動エラー'), str(exc), parent=root)
+        messagebox.showerror(tr('MOSS LoRA Trainer with Kohaku — 起動エラー'), str(exc), parent=root)
         root.destroy()
         raise

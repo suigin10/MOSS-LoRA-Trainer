@@ -1,16 +1,16 @@
-# MOSS Studio with Kohaku v0.2.2
+# MOSS LoRA Trainer with Kohaku v0.2.2
 
 Windows GUI for MOSS-Image LoRA training with Kohaku and sd-scripts. New projects use Kohaku. Saved projects keep their engine and settings.
 
 ## Install and update
 
-1. Extract the release ZIP and run **Start MOSS Studio.bat** with 64-bit Python 3.12. Choose **English** in the header.
+1. Extract the release ZIP and run **Start MOSS LoRA Trainer.bat** with 64-bit Python 3.12. Choose **English** in the header.
 2. Use **Easy setup** to create or repair a dedicated backend: sd-scripts uses cu128 / PyTorch 2.8 or cu124 / 2.6; Kohaku uses cu130 / 2.13. Kohaku also needs a compatible NVIDIA driver and Visual Studio C++ Build Tools.
 3. Select the engine in **04 VRAM / Speed**. Setup preserves unrelated Python environments. Triton is paired with PyTorch and verified with a small GPU kernel.
 4. In **01 Model**, select the MOSS-Image DiT, Qwen3.5-9B encoder and FLUX.2 VAE. For sharded models, select the first shard. W4A8 GPTQ Qwen is unsupported. See the [settings guide](STABLE_SETTINGS.md) for download links.
 5. Add image folders in **02 Dataset**, review settings and run the preflight check before training.
 
-To update, close the app and copy the new application files into its folder. Keep `data/`, `backend/` and your model files. Existing environments can be repaired through Easy setup; CAME requires `pytorch-optimizer` 4.0.0, which setup now installs. Old `start.bat` / `install.bat` files can be removed; use **Start MOSS Studio.bat**.
+To update, close the app and copy the new application files into its folder. Keep `data/`, `backend/` and your model files. Existing environments can be repaired through Easy setup; CAME requires `pytorch-optimizer` 4.0.0, which setup now installs. Old `start.bat` / `install.bat` / `Start MOSS Studio.bat` files can be removed; use **Start MOSS LoRA Trainer.bat**.
 
 ## New-project defaults
 
@@ -58,4 +58,4 @@ The footer shows elapsed time, measured average step time, ETA and dedicated GPU
 
 The user reported completion with the defaults at the initial v0.2.2 publication on an RTX 4070 12GB on 2026-10-24. Earlier 4000-step Kohaku and 1500-step runs used different settings. CAME updates and restart-scheduler resume were checked on CPU. See [development and verification notes](../CONTRIBUTING.md#検証状況) for scope and historical measurements.
 
-KohakuMoss License 1.0 includes an additional naming condition; the product name is **MOSS Studio with Kohaku**. See [third-party notices](../THIRD_PARTY_NOTICES.md) and the bundled license in `licenses/`.
+KohakuMoss License 1.0 includes an additional naming condition; the product name is **MOSS LoRA Trainer with Kohaku**. See [third-party notices](../THIRD_PARTY_NOTICES.md) and the bundled license in `licenses/`.

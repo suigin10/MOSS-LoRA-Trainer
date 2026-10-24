@@ -1,4 +1,4 @@
-# MOSS Studio with Kohaku v0.2.2
+# MOSS LoRA Trainer with Kohaku v0.2.2
 
 Windows向けのMOSS-Image LoRA学習GUIです。Kohaku / sd-scriptsの専用環境導入、プロジェクト管理、キャッシュ、学習・追加学習、ログ表示に対応します。新規プロジェクトはKohakuを使用します。既存プロジェクトのエンジンと保存設定は維持します。
 
@@ -6,7 +6,7 @@ Japanese / English desktop GUI for MOSS-Image LoRA training. Switch to English i
 
 ## 起動と導入
 
-1. Python 3.12（64bit）を用意し、`Start MOSS Studio.bat` を起動します。
+1. Python 3.12（64bit）を用意し、`Start MOSS LoRA Trainer.bat` を起動します。
 2. 「かんたん導入」で学習エンジンと専用環境を作成します。
 3. モデルと画像を指定し、設定を確認して学習を開始します。
 
@@ -54,7 +54,7 @@ Kohakuとsd-scriptsのstateは相互利用できません。更新時はアプ�
 ## ライセンス・クレジット
 
 
-GUIのソースと同梱通知音は [MIT License](LICENSE) です。学習エンジンとモデルは、それぞれの配布元のライセンスに従います。Kohakuは名称条件付きのKohakuMoss License 1.0です。主要表示名「MOSS Studio with Kohaku」はこの条件に対応しています。[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) も参照してください。
+GUIのソースと同梱通知音は [MIT License](LICENSE) です。学習エンジンとモデルは、それぞれの配布元のライセンスに従います。Kohakuは名称条件付きのKohakuMoss License 1.0です。主要表示名「MOSS LoRA Trainer with Kohaku」はこの条件に対応しています。[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) も参照してください。
 
 - [Anima Standalone Trainer](https://github.com/gazingstars123/Anima-Standalone-Trainer)：ローカル学習GUI・プロジェクト管理の参考
 - [sd-scripts MOSS-Image学習ガイド](https://github.com/kohya-ss/sd-scripts/blob/main/docs/moss_image_train_network.md)：引数・モデル形式・VRAM設定の参考

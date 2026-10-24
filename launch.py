@@ -34,8 +34,8 @@ def main():
             detail = error
         # MessageBox works even when the installed Python lacks Tk.
         import ctypes
-        ctypes.windll.user32.MessageBoxW(None, 'MOSS Studio with Kohaku could not start.\n\n' + detail,
-                                        'MOSS Studio with Kohaku - Startup error', 0x10)
+        ctypes.windll.user32.MessageBoxW(None, 'MOSS LoRA Trainer with Kohaku could not start.\n\n' + detail,
+                                        'MOSS LoRA Trainer with Kohaku - Startup error', 0x10)
 
 
 if __name__ == '__main__':

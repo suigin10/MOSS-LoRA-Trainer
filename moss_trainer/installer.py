@@ -72,7 +72,7 @@ def resolve_base_python(explicit=None):
 
 
 def download(url, target):
-    request = urllib.request.Request(url, headers={'User-Agent': 'MOSS-Studio-Installer', 'Accept': 'application/vnd.github+json'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'MOSS-LoRA-Trainer-with-Kohaku-Installer', 'Accept': 'application/vnd.github+json'})
     print('取得: ' + url, flush=True)
     target = Path(target)
     temporary = target.with_name(target.name + '.download')

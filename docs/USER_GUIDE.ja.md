@@ -1,6 +1,6 @@
-# MOSS Studio with Kohaku 利用ガイド
+# MOSS LoRA Trainer with Kohaku 利用ガイド
 
-MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 3.11 以上で `Start MOSS Studio.bat` をダブルクリックして起動します。GUI 自体に追加の pip パッケージは不要です（tkinter が必要）。学習環境は「かんたん導入」で作成できます。モデルファイルは別途用意してください。
+MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 3.11 以上で `Start MOSS LoRA Trainer.bat` をダブルクリックして起動します。GUI 自体に追加の pip パッケージは不要です（tkinter が必要）。学習環境は「かんたん導入」で作成できます。モデルファイルは別途用意してください。
 
 対象GPUは CUDA / bf16 対応の NVIDIA ビデオカードです。推奨設定は特定の機種名ではなく、VRAM容量別に用意しています。新規プロジェクトのエンジンはKohakuです。初期値は VRAM 12GB のビデオカード向けで、16GB・24GB以上のプリセットも選べます。
 
@@ -12,7 +12,7 @@ MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 
 
 ## かんたん導入（推奨）
 
-**Python 3.12（64bit）をインストール済みなら、`Start MOSS Studio.bat` を開き、GUI右上の「かんたん導入」からエンジンを選び「導入・確認・修復を開始」を押します。** GUI 右上の「かんたん導入」からも同じ操作ができます。
+**Python 3.12（64bit）をインストール済みなら、`Start MOSS LoRA Trainer.bat` を開き、GUI右上の「かんたん導入」からエンジンを選び「導入・確認・修復を開始」を押します。** GUI 右上の「かんたん導入」からも同じ操作ができます。
 
 - 初回だけ専用 venv と sd-scripts を作成します。2 回目以降は、この GUI が作った同じ専用環境を確認・修復します。他用途の venv やグローバルパッケージは流用しません。
 - sd-scripts は公式リポジトリの ZIP から取得するため Git は不要です。
@@ -28,7 +28,7 @@ MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 
 
 ## 最初に使うとき
 
-1. ZIP を展開し、`Start MOSS Studio.bat` を起動します。コマンドからは `python launch.py`。
+1. ZIP を展開し、`Start MOSS LoRA Trainer.bat` を起動します。コマンドからは `python launch.py`。
 2. 「かんたん導入」で新規環境を作ります。手動で準備した環境を使う場合は、右上の「実行環境」で Python と sd-scripts フォルダを指定できます。
 3. 「保存して環境チェック」で CUDA / bf16 / パッケージを確認します。
 4. 「モデル」タブの各「参照…」で、DiT、Qwen3.5-9B、FLUX.2 VAE をファイル選択ダイアログから指定します。手入力もできます。
@@ -122,7 +122,7 @@ Attention は初期値の `torch` を推奨します。`xformers` を選ぶと�
 
 読み込み時は学習・生成設定、モデルと画像のパス、出力 LoRA 名を復元します。実行履歴は取り込まず、state 再開と初期 LoRA 重みの指定は解除します。このPCに登録された学習エンジンの専用環境を使用します。別PCのパスが存在しなくても取り込めるので、読み込み後に「参照…」で選び直してください。未対応の形式や不正な型は読み込み時にエラーを表示します。古い版で省略されている項目は初期値を補います。
 
-対象は MOSS Studio が書き出す設定 JSON です。`train.toml` / `dataset.toml` を直接編集した内容を取り込む機能や、他GUIの設定形式の変換は含みません。
+対象は MOSS LoRA Trainer with Kohaku が書き出す設定 JSON です。`train.toml` / `dataset.toml` を直接編集した内容を取り込む機能や、他GUIの設定形式の変換は含みません。
 
 ## 表示言語
 
@@ -201,7 +201,7 @@ RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）
 
 ### 導入
 
-1. `Start MOSS Studio.bat` を開き、右上の「かんたん導入」を押します。
+1. `Start MOSS LoRA Trainer.bat` を開き、右上の「かんたん導入」を押します。
 2. 学習エンジンを `sd-scripts` または `kohaku` にします。
 3. sd-scriptsはcu128（PyTorch 2.8）またはcu124（2.6）。Kohakuを選ぶとcu130（2.13）へ切り替わります。Kohakuには対応するNVIDIAドライバとVisual Studio Build ToolsのC++ワークロードが必要です。
 4. 「導入・確認・修復を開始」を押します。専用環境だけを変更します。sd-scriptsは `backend/moss-env`、Kohakuは `backend/kohaku-env` です。
@@ -246,7 +246,7 @@ constant以外のSchedulerでは、再開時に総STEPを変更する機能に�
 
 ### 既存版からの更新
 
-アプリを終了して新しいZIPを別フォルダへ展開し、必要に応じて旧版の `data` と `backend` を移してください。同じ場所へ上書きする場合、古い `start.bat` と `install.bat` はZIP展開だけでは削除されないため、手動で削除できます。新しい起動ファイルは `Start MOSS Studio.bat` の1つです。
+アプリを終了して新しいZIPを別フォルダへ展開し、必要に応じて旧版の `data` と `backend` を移してください。同じ場所へ上書きする場合、古い `start.bat` と `install.bat` はZIP展開だけでは削除されないため、手動で削除できます。旧名の `Start MOSS Studio.bat` も削除できます。新しい起動ファイルは `Start MOSS LoRA Trainer.bat` の1つです。保存フォルダ名を変更する必要はありません。
 
 ソース、LICENSE、THIRD_PARTY_NOTICES、`setup_backend.py` は必要です。`setup_backend.py` はGUIの導入処理に使います。
 
@@ -255,7 +255,7 @@ constant以外のSchedulerでは、再開時に総STEPを変更する機能に�
 
 KohakuMossTrainerは **KohakuMoss License 1.0** です。Apache-2.0に第10条の名称条件が追加された独自ライセンスであり、通常のApache-2.0として扱わないでください。
 
-利用・改変・再配布が認められていますが、組み込んで配布する製品・パッケージ・主要ブランドのいずれかに **Kohaku** が必要です。この対応版の主要表示名を **MOSS Studio with Kohaku** にしています。非公開の内部ツールや、学習で生成したモデル・LoRA・画像などには第10条の適用除外があります。モデル本体の利用条件は別です。
+利用・改変・再配布が認められていますが、組み込んで配布する製品・パッケージ・主要ブランドのいずれかに **Kohaku** が必要です。この対応版の主要表示名を **MOSS LoRA Trainer with Kohaku** にしています。非公開の内部ツールや、学習で生成したモデル・LoRA・画像などには第10条の適用除外があります。モデル本体の利用条件は別です。
 
 配布時にはライセンス本文・著作権表示と、該当するNOTICEを保持します。Kohakuを改変して再配布する場合は変更の明記も必要です。このGUIは上流ソースを改変せず、専用venv内に取得したソースから実行します。取得したソースにはLICENSEとエンコーダーのNOTICEを残し、GUI側にも `licenses/KohakuMoss-LICENSE.txt` を収録しています。GUI独自部分のMITライセンスがKohakuへ適用されることはありません。
 

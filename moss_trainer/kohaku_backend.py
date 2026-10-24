@@ -175,7 +175,7 @@ def write_configs(project, env, run_dir):
     run_dir = Path(run_dir).resolve()
     (run_dir / 'dataset.jsonl').write_text(manifest(project), encoding='utf-8')
     values = knobs(project, run_dir)
-    config = '"""MOSS Studio with Kohaku. Drives scripts/train/moss.py."""\n' + '\n'.join(f'{k} = {v!r}' for k, v in values.items()) + '\n'
+    config = '"""MOSS LoRA Trainer with Kohaku. Drives scripts/train/moss.py."""\n' + '\n'.join(f'{k} = {v!r}' for k, v in values.items()) + '\n'
     (run_dir / 'kohaku_train.py').write_text(config, encoding='utf-8')
     data = ('"""Drives scripts/data/cache_text.py and scripts/data/cache_latents.py."""\n'
             'from kohakuengine import use_config\n'

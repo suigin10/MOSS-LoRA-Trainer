@@ -1,6 +1,6 @@
 # クレジットと外部コンポーネント
 
-MOSS StudioのGUIと通知音はこのリポジトリの独自実装です。GUIの参考にしたプロジェクトのソースや、モデルの重みは同梱していません。
+MOSS LoRA Trainer with KohakuのGUIと通知音はこのリポジトリの独自実装です。GUIの参考にしたプロジェクトのソースや、モデルの重みは同梱していません。
 
 | プロジェクト | 利用方法 |
 |---|---|
@@ -16,7 +16,7 @@ MOSS StudioのGUIと通知音はこのリポジトリの独自実装です。GUI
 
 ## Kohaku対応版で追加した外部コンポーネント
 
-- [KohakuMossTrainer](https://github.com/KohakuBlueleaf/KohakuMossTrainer): 専用環境に取得する追加の学習バックエンド。KohakuMoss License 1.0（Apache-2.0ベース＋第10条の名称条件）。ライセンス本文は `licenses/KohakuMoss-LICENSE.txt`。主要表示名は **MOSS Studio with Kohaku**。上流ソースは改変せず、LICENSEおよび同梱NOTICEを保持します。
+- [KohakuMossTrainer](https://github.com/KohakuBlueleaf/KohakuMossTrainer): 専用環境に取得する追加の学習バックエンド。KohakuMoss License 1.0（Apache-2.0ベース＋第10条の名称条件）。ライセンス本文は `licenses/KohakuMoss-LICENSE.txt`。主要表示名は **MOSS LoRA Trainer with Kohaku**。上流ソースは改変せず、LICENSEおよび同梱NOTICEを保持します。
 - [triton-windows](https://github.com/triton-lang/triton-windows): WindowsのGPUカーネル環境。MIT。専用venvへ別途インストールし、パッケージ付属のライセンスを保持します。
 - Kohakuの依存ライブラリ（LyCORIS、KohakuEngine、AnySchedule、TileLangなど）は各パッケージのライセンスに従います。GUIのMITはこれらを置き換えません。
 

@@ -17,5 +17,5 @@ def realign_scheduler(wrapped, saved_step):
     for group, rate in zip(scheduler.optimizer.param_groups, rates):
         group['lr'] = rate
     scheduler._last_lr = rates
-    print(f'MOSS Studio: recalculated LR at saved step {saved_step} for the new training limit: {rates}', flush=True)
+    print(f'MOSS LoRA Trainer with Kohaku: recalculated LR at saved step {saved_step} for the new training limit: {rates}', flush=True)
     return rates

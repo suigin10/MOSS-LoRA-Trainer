@@ -6,6 +6,14 @@ import shutil
 import sys
 
 
+def build_came(groups, device, lr, betas=None, eps=None, **kwargs):
+    """Kohaku builder contract, using CAME's own betas/eps instead of AdamW knobs."""
+    from pytorch_optimizer import CAME
+    internal = {'names', 'splits', 'decay_to_one', 'decay_to_one_coef', 'use_muon'}
+    groups = [{k: v for k, v in group.items() if k not in internal} for group in groups]
+    return CAME(groups, lr=lr, betas=(0.9, 0.999, 0.9999), eps1=1e-30, eps2=1e-16, **kwargs)
+
+
 def archive_exports(run_dir, output_name):
     run_dir = Path(run_dir)
     for folder in sorted((run_dir / 'kohaku' / 'checkpoints').glob('step_*')):

@@ -201,7 +201,7 @@ def _install(folder, data_dir, base_python=None, profile='cu128'):
 
         print('[4/6] sd-scripts と学習用パッケージを導入', flush=True)
         run([python, '-m', 'pip', 'install', '-c', constraints, '-r', 'requirements.txt'], cwd=source)
-        run([python, '-m', 'pip', 'install', '-c', constraints, 'tensorboard', 'bitsandbytes'], cwd=source)
+        run([python, '-m', 'pip', 'install', '-c', constraints, 'tensorboard', 'bitsandbytes', 'pytorch-optimizer==4.0.0'], cwd=source)
         print('Triton を導入して GPU カーネルのコンパイル・実行を確認', flush=True)
         install_triton(python, torch_version, source)
         run([python, '-m', 'pip', 'check'], cwd=source)
@@ -258,7 +258,7 @@ def _install_kohaku(folder, data_dir, base_python=None):
         constraints.write_text('torch==2.13.0\n', encoding='utf-8')
         run([python, '-m', 'pip', 'install', '-c', constraints, 'torch==2.13.0', 'torchvision',
              '--index-url', 'https://download.pytorch.org/whl/cu130'])
-        run([python, '-m', 'pip', 'install', '-c', constraints, '-e', str(source) + '[cuda]', 'tensorboard'])
+        run([python, '-m', 'pip', 'install', '-c', constraints, '-e', str(source) + '[cuda]', 'tensorboard', 'pytorch-optimizer==4.0.0'])
         install_triton(python, '2.13.0', source)
         run([python, '-m', 'pip', 'check'], cwd=source)
         doctor = python.with_name('kohakumoss-doctor.exe' if os.name == 'nt' else 'kohakumoss-doctor')

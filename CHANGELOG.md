@@ -1,5 +1,20 @@
 # 変更履歴
 
+## 0.2.2 — 2026-10-24
+
+- cosine_with_restartsを両エンジンへ追加。初期値2周期、warmupは開始時のみ。通常のcosineを既定に維持し、周期数の入力・出力・state再開の差分チェックに対応。
+
+- CAMEを両エンジンへ追加し、導入処理・依存チェック・Kohaku連携を追加。新規Optimizerは両エンジンともAdamW、Schedulerはcosine・warmup 100。
+
+- Kohakuでshift timestepに対応。新規初期値をshift・flow shift 3.0へ変更し、sd-scriptsの設定ガイドにも反映。既存のsigma設定とstate互換性チェックを維持。
+
+- Caption dropoutに自然文キャプションでは0推奨と表示。STEP数0の入力で編集欄が無効になる問題を修正し、STEP指定時は未使用のEpoch数0を許可。
+
+- Kohakuの学習対象にFFN_downのみ・Attention＋FFN・Attentionのみの選択を追加。新規初期値をFFN_downのみ・学習率5e-5・2000STEP・100STEPごと保存に変更。
+- 旧プロジェクトの学習対象をAttention＋FFNとして保持し、state再開時の対象変更を検出。sd-scriptsの包含・除外設定と速度調整を設定ガイドへ追記。
+- 両エンジンの新規STEP数を2000・保存間隔を100に統一。日英ドキュメントと設定ガイドを整理。
+- 利用者より、RTX 4070 12GBで現行デフォルト設定の学習完走を報告。
+
 ## 0.2.1 — 2026-10-21
 
 - 利用者のRTX 4070 12GBで、Kohakuの4000STEP学習完走・サンプル生成・最終LoRA出力を確認。READMEと検証記録に設定条件・実測値を追記。

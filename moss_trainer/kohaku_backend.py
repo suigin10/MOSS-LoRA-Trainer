@@ -5,6 +5,27 @@ from pathlib import Path
 
 from .i18n import tr
 
+
+def training_preset(training):
+    # Missing fields belong to projects created before target selection existed.
+    target = training.get('kohaku_train_target', 'attn-mlp')
+    if target == 'ffn-down':
+        return {'target_name': [r'layers\.\d+\.proj\.ffn_down$']}
+    if target in ('attn-mlp', 'attn'):
+        return target
+    raise ValueError(tr('Kohaku: 学習対象が不正です。'))
+
+
+def timestep_knobs(flow):
+    if flow['timestep_sampling'] == 'shift':
+        # sd-scripts: u = sigmoid(sigmoid_scale * N(0,1)); sigma = shift(u).
+        return 'logit_normal', {'mu': 0.0, 's': flow['sigmoid_scale'],
+                                'shift': flow['discrete_flow_shift']}
+    if flow['timestep_sampling'] == 'sigma':
+        return 'moss', {'mu': flow['logit_mean'], 's': flow['logit_std'],
+                        'shift': flow['discrete_flow_shift'], 'cutoff': 0.95, 'uniform_mix': 0.01}
+    raise ValueError(tr('Kohaku: Timestepはsigmaまたはshift、Weighting schemeはlogit_normalを選択してください。'))
+
 def problems(project):
     s = project['settings']
     t, m, d, f = (s[k] for k in ('training', 'memory', 'dataset', 'flow'))
@@ -14,8 +35,8 @@ def problems(project):
             errors.append(message)
     need(t['max_train_steps'] > 0, tr('Kohaku: STEP数を指定してください。Epoch指定には未対応です。'))
     need(not t['network_weights'], tr('Kohaku: 初期LoRA重みには未対応です。Kohakuのcheckpointから再開してください。'))
-    need(t['optimizer_type'] in ('AdamW', 'AdamW8bit'), tr('Kohaku: OptimizerはAdamWまたはAdamW8bitを選択してください。'))
-    need(t['lr_scheduler'] in ('constant', 'constant_with_warmup', 'cosine', 'linear'), tr('Kohaku: Schedulerの設定を確認してください。'))
+    need(t['optimizer_type'] in ('AdamW', 'AdamW8bit', 'CAME'), tr('Kohaku: OptimizerはAdamW・AdamW8bit・CAMEから選択してください。'))
+    need(t['lr_scheduler'] in ('constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear'), tr('Kohaku: Schedulerの設定を確認してください。'))
     need(t['save_every_n_epochs'] == 0, tr('Kohaku: 保存間隔はSTEP数で指定してください。'))
     need(t['save_state'] or t['save_every_n_steps'] == 0,
          tr('Kohaku: STEPごとのLoRA保存にはstate保存もONにしてください。'))
@@ -26,8 +47,8 @@ def problems(project):
     need(m['kohaku_max_tokens'] >= 1024, tr('Kohaku: トークン上限は1024以上にしてください。'))
     need(not f['train_text_embedder'] and not any(f[k] for k in ('exclude_patterns', 'include_patterns', 'network_reg_dims', 'network_reg_lrs')),
          tr('Kohaku: Text embedder学習とモジュール別の指定には未対応です。'))
-    need(f['timestep_sampling'] == 'sigma' and f['weighting_scheme'] == 'logit_normal',
-         tr('Kohaku: Flow設定をsigma / logit_normalに戻してください。KohakuのMOSS objectiveを使用します。'))
+    need(f['timestep_sampling'] in ('sigma', 'shift') and f['weighting_scheme'] == 'logit_normal',
+         tr('Kohaku: Timestepはsigmaまたはshift、Weighting schemeはlogit_normalを選択してください。'))
     sample = s['samples']
     need(not sample['enabled'] or (sample['sample_every_n_steps'] > 0 and sample['sample_every_n_epochs'] == 0 and not sample['sample_at_first']),
          tr('Kohaku: サンプルはSTEP間隔で指定してください。開始前生成には未対応です。'))
@@ -83,11 +104,24 @@ def knobs(project, run_dir):
     s = project['settings']
     t, m, d, f, sample = (s[k] for k in ('training', 'memory', 'dataset', 'flow', 'samples'))
     run_dir = Path(run_dir).resolve()
+    timestep, timestep_kwargs = timestep_knobs(f)
     schedule = {'mode': t['lr_scheduler'].replace('constant_with_warmup', 'constant'),
                 'warmup': t['lr_warmup_steps'] if t['lr_scheduler'] != 'constant' else 0,
-                'end': -1, 'min_value': t.get('kohaku_lr_min_ratio', 0.0) if t['lr_scheduler'] == 'cosine' else 0.0 if t['lr_scheduler'] == 'linear' else 1.0}
+                'end': -1, 'min_value': t.get('kohaku_lr_min_ratio', 0.0) if t['lr_scheduler'] in ('cosine', 'cosine_with_restarts') else 0.0 if t['lr_scheduler'] == 'linear' else 1.0}
     if t['lr_scheduler'] == 'linear':
         schedule.update(mode='polynomial', power=1)
+    if t['lr_scheduler'] == 'cosine_with_restarts':
+        cycles = t.get('lr_scheduler_num_cycles', 2)
+        warmup, total = t['lr_warmup_steps'], t['max_train_steps']
+        if cycles < 1 or total - warmup < cycles:
+            raise ValueError(tr('再スタートにはwarmup後に周期数以上のSTEP数が必要です。'))
+        segments = []
+        for i in range(cycles):
+            segments.append({'mode': 'cosine', 'start': 0 if i == 0 else warmup + (total - warmup) * i // cycles,
+                             'end': warmup + (total - warmup) * (i + 1) // cycles,
+                             'warmup': warmup if i == 0 else 0, 'value': 1.0,
+                             'min_value': schedule['min_value']})
+        schedule = {'mode': 'composer', 'end': -1, 'schedules': segments}
     out = {
         'WEIGHTS': s['model']['pretrained_model_name_or_path'],
         'VARIANT': 'sft' if 'moss_image_sft' in Path(s['model']['pretrained_model_name_or_path']).name.lower() else 'base',
@@ -101,16 +135,15 @@ def knobs(project, run_dir):
         'TEXT_DROP': d['caption_dropout_rate'], 'LATENT_CACHE': 'offline', 'TEXT_CACHE': 'offline',
         'CACHE_DIR': cache_directory(project, run_dir).as_posix(),
         'NUM_WORKERS': m['max_data_loader_n_workers'], 'DATA_SCAN_WORKERS': max(1, m['num_cpu_threads_per_process']),
-        'SEED': t['seed'], 'ALGO': 'lora', 'PRESET': 'attn-mlp',
+        'SEED': t['seed'], 'ALGO': 'lora', 'PRESET': training_preset(t),
         'DIM': t['network_dim'], 'ALPHA': float(t['network_alpha']),
         'DROPOUT': {'input': 0.0, 'rank': f['rank_dropout'], 'module': f['module_dropout']},
-        'TIMESTEP': 'moss', 'TIMESTEP_KWARGS': {'mu': f['logit_mean'], 's': f['logit_std'],
-            'shift': f['discrete_flow_shift'], 'cutoff': 0.95, 'uniform_mix': 0.01},
-        'OPTIMIZER': {'AdamW': 'adamw', 'AdamW8bit': 'adamw8bit'}[t['optimizer_type']],
+        'TIMESTEP': timestep, 'TIMESTEP_KWARGS': timestep_kwargs,
+        'OPTIMIZER': {'AdamW': 'adamw', 'AdamW8bit': 'adamw8bit', 'CAME': 'kohaku_train_entry.build_came'}[t['optimizer_type']],
         'LR': t['learning_rate'], 'SCHEDULE': schedule, 'GRAD_CLIP': t['max_grad_norm'],
         'PRECISION': 'bf16', 'MEMORY_PROFILE': m['kohaku_memory_profile'],
         # bitsandbytes owns its GPU states. Use its regular step after backward.
-        'MEMORY_OVERRIDES': {'optim_state': 'gpu', 'fused_step': False} if t['optimizer_type'] == 'AdamW8bit' else {},
+        'MEMORY_OVERRIDES': {'optim_state': 'gpu', 'fused_step': False} if t['optimizer_type'] in ('AdamW8bit', 'CAME') else {},
         'BASE_PRECISION': m['kohaku_base_precision'], 'FP8_DGRAD': '16bit',
         'TEXT_ENCODE': {'memory': 'ring', 'batch': 1, 'max_tokens': 8192, 'dtype': 'bf16'},
         'VAE_ENCODE': {'memory': 'offload', 'batch': 1, 'compile': 'off'}, 'VAE_DTYPE': 'bf16',

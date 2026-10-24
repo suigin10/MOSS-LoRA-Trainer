@@ -1,4 +1,4 @@
-# MOSS Studio with Kohaku v0.2.1
+# MOSS Studio with Kohaku v0.2.2
 
 Windows向けのMOSS-Image LoRA学習GUIです。Kohaku / sd-scriptsの専用環境導入、プロジェクト管理、キャッシュ、学習・追加学習、ログ表示に対応します。新規プロジェクトはKohakuを使用します。既存プロジェクトのエンジンと保存設定は維持します。
 
@@ -25,12 +25,13 @@ CUDA / bf16対応のNVIDIA GPUが対象です。Kohakuの導入には対応ド�
 
 ## 新規学習の初期値
 
-Kohakuの学習条件は公式LoRAレシピを参考に、**Rank/Alpha 32/32、AdamW8bit、LR 1e-4、cosine、warmup 100、最小学習率10%、4000step、200stepごと保存、caption dropout 0.1**を使用します。
-学習上限は公式共通設定と同じ4000stepです。このGUIでは省メモリのAdamW8bitと200stepごと保存を初期値にしています（公式共通設定はAdamW・500step保存）。
+新規Kohakuは、**FFN_downのみ、Rank/Alpha 32/32、AdamW、学習率5e-5、cosine、warmup 100、最小学習率10%、2000STEP、100STEPごと保存、timestep shift / flow shift 3.0**が初期値です。Caption dropoutは0.1で、自然文キャプションでは0を推奨します。
+学習対象は「03 学習」でattn-mlp（Attention＋FFN）・attn（Attentionのみ）にも切り替えられます。OptimizerにはAdamW8bit・CAMEも選べます。CAME用パッケージは「かんたん導入」で追加します。
 INT8・ckpt-resident・batch 1・画像＋テキスト上限6144は、このGUIの12GB向け開始設定です。
+Schedulerは通常のcosineが既定です。比較用にcosine_with_restartsも選択でき、初期値は2周期（再スタート1回）です。詳細は設定ガイドを参照してください。
 
-既存プロジェクトとstateの保存設定は維持します。旧cosineの最小学習率は従来の0%を保持します。
-sd-scriptsの推奨開始値は [設定ガイド](docs/STABLE_SETTINGS.md) の別列を参照してください。エンジン切り替えだけで学習条件は上書きしません。
+両エンジンとも、新規設定のSTEP数は2000、保存間隔は100、OptimizerはAdamW、Schedulerはcosineです。sd-scripts用のRank・学習率などは [設定ガイド](docs/STABLE_SETTINGS.md) の別列を参照してください。
+既存プロジェクトは保存済みの値を保持します。更新やエンジン切り替えだけでは学習条件を上書きしません。学習対象・Optimizer・Scheduler・timestep方式を変える場合は、新規学習を開始してください。
 
 ## 設定と出力
 
@@ -44,9 +45,11 @@ Kohakuとsd-scriptsのstateは相互利用できません。更新時はアプ�
 
 ## 現在の確認状況
 
-**利用者のRTX 4070 12GB実機で、Kohakuの4000STEP学習完走・サンプル生成・最終LoRA出力を確認済みです（2026-10-21報告）。** 実行条件はRank/Alpha 32/32・AdamW8bit・cosine・ckpt-resident・auto・画像＋テキスト上限6144・200STEPごと保存で、現在の学習初期値と一致しています。サンプル生成ON（250STEPごと）で、学習平均**4.35秒/STEP**、総所要時間**4時間51分24秒**（準備・保存込み）、GPU全体の専用VRAM観測最大**11.3GiB / 12GiB**でした。サンプル生成は新規プロジェクトでは初期OFFです。
+- 利用者のRTX 4070 12GBで、現行デフォルト設定の学習完走を報告いただいています（2026-10-24）。
+- 過去にはKohakuの4000STEP学習・サンプル生成・最終LoRA出力、両エンジンの1500STEP学習も完走しています。過去の速度値は現行設定と条件が異なります。
+- CAMEと再スタート付きcosineはCPUで更新・state復元を確認しています。GPUでの生成品質比較は未実施です。
 
-Kohaku（旧設定・新設定）とsd-scriptsでは1500STEPの学習完走、100STEP学習と50STEP追加学習も確認済みです。旧設定（Rank16/Alpha1・AdamW8bit・constant、INT8・ckpt-resident）の約4.10秒/STEP・デバイスVRAM約10.3GiBは、別条件の短期診断値です。生成品質の比較は未実施です。詳細は開発・検証文書にまとめています。
+自動テスト、実機報告、過去の速度値と条件は [開発・検証](CONTRIBUTING.md#検証状況) にまとめています。
 
 ## ライセンス・クレジット
 

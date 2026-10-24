@@ -52,6 +52,7 @@ class InstallerTests(unittest.TestCase):
         venv_commands = [call.args[0] for call in steps.call_args_list if 'venv' in call.args[0]]
         self.assertEqual(len(venv_commands), 1)
         self.assertFalse(any('--system-site-packages' in c for c in venv_commands))
+        self.assertTrue(any('pytorch-optimizer==4.0.0' in call.args[0] for call in steps.call_args_list))
 
     def test_failure_preserves_previous_environment(self):
         with patch('moss_trainer.installer.resolve_base_python', return_value=sys.executable), \

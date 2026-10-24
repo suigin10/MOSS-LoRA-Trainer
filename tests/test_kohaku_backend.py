@@ -41,16 +41,119 @@ class KohakuTests(unittest.TestCase):
         fresh = self.store.create('official')
         values = knobs(fresh, self.root)
         self.assertEqual((values['DIM'], values['ALPHA']), (32, 32.0))
-        self.assertEqual(values['OPTIMIZER'], 'adamw8bit')
-        self.assertEqual(values['MEMORY_OVERRIDES'], {'optim_state': 'gpu', 'fused_step': False})
-        self.assertEqual(values['LR'], 1e-4)
+        self.assertEqual(values['OPTIMIZER'], 'adamw')
+        self.assertEqual(values['MEMORY_OVERRIDES'], {})
+        self.assertEqual(values['LR'], 5e-5)
         self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
-        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (4000, 200, 0.1))
+        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (2000, 100, 0.1))
+        self.assertEqual(values['PRESET'], {'target_name': [r'layers\.\d+\.proj\.ffn_down$']})
+        self.assertEqual(values['TIMESTEP'], 'logit_normal')
+        self.assertEqual(values['TIMESTEP_KWARGS'], {'mu': 0.0, 's': 1.0, 'shift': 3.0})
         self.assertNotIn('kohaku_lr_min_ratio', training_config(fresh, self.root))
         fresh['settings']['training']['lr_scheduler'] = 'linear'
         self.assertEqual(knobs(fresh, self.root)['SCHEDULE']['min_value'], 0.0)
         fresh['settings']['training']['kohaku_lr_min_ratio'] = 1.1
         self.assertTrue(validate(fresh))
+
+    def test_restart_schedule_exports_and_validates_cycles(self):
+        self.p['settings']['training'].update(lr_scheduler='cosine_with_restarts', max_train_steps=2500,
+            lr_warmup_steps=100, kohaku_lr_min_ratio=0.1)
+        run = self.root / 'restarts'
+        write_run(self.p, self.env, run)
+        values = runpy.run_path(str(run / 'kohaku_train.py'))
+        schedule = values['SCHEDULE']
+        self.assertEqual(schedule['mode'], 'composer')
+        self.assertEqual([(s['start'], s['end'], s['warmup']) for s in schedule['schedules']],
+                         [(0, 1300, 100), (1300, 2500, 0)])
+        self.assertTrue(all(s['value'] == 1.0 and s['min_value'] == 0.1 for s in schedule['schedules']))
+        sd = training_config(self.p, run)
+        self.assertEqual((sd['lr_scheduler'], sd['lr_scheduler_num_cycles']), ('cosine_with_restarts', 2))
+        for cycles in (0, -1, 2401):
+            self.p['settings']['training']['lr_scheduler_num_cycles'] = cycles
+            self.assertTrue(validate(self.p))
+
+    def test_cycles_only_affect_restart_resume_and_export(self):
+        from moss_trainer.core import resume_differences
+        self.p['settings']['training']['lr_scheduler'] = 'cosine_with_restarts'
+        original = copy.deepcopy(self.p)
+        self.p['settings']['training']['lr_scheduler_num_cycles'] = 3
+        self.assertTrue(resume_differences(self.p, {'backend': 'kohaku', 'snapshot': original}))
+        original['settings']['training']['lr_scheduler'] = 'cosine'
+        self.p['settings']['training']['lr_scheduler'] = 'cosine'
+        del original['settings']['training']['lr_scheduler_num_cycles']
+        self.assertEqual(resume_differences(self.p, {'backend': 'kohaku', 'snapshot': original}), [])
+        self.assertNotIn('lr_scheduler_num_cycles', training_config(self.p, self.root))
+        self.store.save(original)
+        loaded = self.store.load(self.store.directory(original) / 'project.json')
+        self.assertEqual(loaded['settings']['training']['lr_scheduler_num_cycles'], 2)
+        self.assertEqual(loaded['settings']['training']['lr_scheduler'], 'cosine')
+
+    def test_came_export_dependency_and_optimizer_resume_difference(self):
+        from moss_trainer.core import resume_differences
+        original = copy.deepcopy(self.p)
+        self.p['settings']['training']['optimizer_type'] = 'CAME'
+        self.assertEqual(validate(self.p), [])
+        values = knobs(self.p, self.root)
+        self.assertEqual(values['OPTIMIZER'], 'kohaku_train_entry.build_came')
+        self.assertEqual(values['MEMORY_OVERRIDES'], {'optim_state': 'gpu', 'fused_step': False})
+        self.assertEqual(training_config(self.p, self.root)['optimizer_type'], 'pytorch_optimizer.CAME')
+        self.assertTrue(resume_differences(self.p, {'backend': 'kohaku', 'snapshot': original}))
+        errors = probe_errors({}, self.p['settings'])
+        self.assertTrue(any('pytorch_optimizer' in e for e in errors))
+        self.assertFalse(any('pytorch_optimizer' in e for e in probe_errors({'pytorch_optimizer': True}, self.p['settings'])))
+
+    def test_shift_sampler_export_preserves_legacy_sigma_and_resume_checks(self):
+        from moss_trainer.core import resume_differences
+        legacy = copy.deepcopy(self.p)
+        self.assertEqual(knobs(legacy, self.root)['TIMESTEP'], 'moss')
+        self.assertEqual(knobs(legacy, self.root)['TIMESTEP_KWARGS']['shift'], 1.0)
+        self.p['settings']['flow'].update(timestep_sampling='shift', discrete_flow_shift=3.0, sigmoid_scale=1.25)
+        run = self.root / 'shift'
+        write_run(self.p, self.env, run)
+        values = runpy.run_path(str(run / 'kohaku_train.py'))
+        self.assertEqual(values['TIMESTEP'], 'logit_normal')
+        self.assertEqual(values['TIMESTEP_KWARGS'], {'mu': 0.0, 's': 1.25, 'shift': 3.0})
+        sd = training_config(self.p, run)
+        self.assertEqual((sd['timestep_sampling'], sd['discrete_flow_shift'], sd['sigmoid_scale']), ('shift', 3.0, 1.25))
+        self.assertEqual(validate(self.p), [])
+        self.assertTrue(resume_differences(self.p, {'backend': 'kohaku', 'snapshot': legacy}))
+        self.store.save(legacy)
+        loaded = self.store.load(self.store.directory(legacy) / 'project.json')
+        self.assertEqual(loaded['settings']['flow']['timestep_sampling'], 'sigma')
+        self.assertEqual(loaded['settings']['flow']['discrete_flow_shift'], 1.0)
+        self.p['settings']['flow']['timestep_sampling'] = 'flux_shift'
+        self.assertTrue(validate(self.p))
+
+    def test_training_targets_serialize_and_do_not_leak_into_sd_scripts(self):
+        for target, expected in [('ffn-down', {'target_name': [r'layers\.\d+\.proj\.ffn_down$']}),
+                                 ('attn-mlp', 'attn-mlp'), ('attn', 'attn')]:
+            with self.subTest(target=target):
+                self.p['settings']['training']['kohaku_train_target'] = target
+                run = self.root / target
+                write_run(self.p, self.env, run)
+                self.assertEqual(runpy.run_path(str(run / 'kohaku_train.py'))['PRESET'], expected)
+                self.assertNotIn('kohaku_train_target', training_config(self.p, run))
+        self.p['settings']['training']['kohaku_train_target'] = 'typo'
+        self.assertTrue(validate(self.p))
+        with self.assertRaises(ValueError):
+            knobs(self.p, self.root)
+
+    def test_old_projects_keep_full_target_and_resume_requires_same_target(self):
+        from moss_trainer.core import resume_differences
+        del self.p['settings']['training']['kohaku_train_target']
+        original = copy.deepcopy(self.p)
+        self.assertEqual(knobs(original, self.root)['PRESET'], 'attn-mlp')
+        self.store.save(original)
+        loaded = self.store.load(self.store.directory(original) / 'project.json')
+        self.assertEqual(loaded['settings']['training']['kohaku_train_target'], 'attn-mlp')
+        self.assertEqual(loaded['settings']['training']['learning_rate'], 0.0001)
+        info = {'backend': 'kohaku', 'snapshot': original}
+        self.assertEqual(resume_differences(loaded, info), [])
+        loaded['settings']['training']['kohaku_train_target'] = 'ffn-down'
+        self.assertTrue(resume_differences(loaded, info))
+        original['settings']['memory']['backend'] = 'sd-scripts'
+        loaded['settings']['memory']['backend'] = 'sd-scripts'
+        self.assertEqual(resume_differences(loaded, {'backend': 'sd-scripts', 'snapshot': original}), [])
 
     def test_legacy_cosine_keeps_zero_floor_and_resume_checks_changes(self):
         from moss_trainer.core import resume_differences

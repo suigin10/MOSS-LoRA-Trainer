@@ -38,7 +38,7 @@ FIELDS = {
         'bucket_no_upscale': ('小さい画像を拡大しない', True, None, ''),
         'caption_extension': ('キャプション拡張子', '.txt', None, '画像と同じ名前の .txt を使用'),
         'enable_multiline_caption': ('複数行キャプション', True, None, '自然文キャプションの改行を保持'),
-        'caption_dropout_rate': ('Caption dropout', 0.1, None, 'Kohaku公式初期値0.1。TE キャッシュと併用可能'),
+        'caption_dropout_rate': ('Caption dropout', 0.1, None, '自然文キャプションでは0推奨。Kohaku公式初期値0.1。TE キャッシュと併用可能'),
         'shuffle_caption': ('キャプションをシャッフル', False, None, 'TE キャッシュと併用不可。自然文では通常 OFF'),
         'color_aug': ('色の拡張', False, None, 'Latent キャッシュと併用不可'),
         'random_crop': ('ランダムクロップ', False, None, 'Latent キャッシュと併用不可'),
@@ -47,17 +47,19 @@ FIELDS = {
         'output_name': ('出力 LoRA 名', 'moss_lora', None, 'safetensors のファイル名（拡張子不要）'),
         'network_dim': ('Rank / dim', 32, None, 'Kohaku公式LoRA初期値32。sd-scriptsの開始値は設定ガイドを参照'),
         'network_alpha': ('Alpha', 32.0, None, 'Kohaku公式LoRA初期値32。Rank・Alphaはstate再開時に変更できません'),
-        'learning_rate': ('学習率', 0.0001, None, '固定の最適値ではありません。データセットに応じて調整'),
-        'optimizer_type': ('Optimizer', 'AdamW8bit', ['AdamW8bit', 'AdamW', 'Adafactor'], '初期値はAdamW8bit（省メモリ）。Kohaku公式初期値はAdamW。Adafactorはsd-scripts専用'),
-        'lr_scheduler': ('LR scheduler', 'cosine', ['constant', 'constant_with_warmup', 'cosine', 'linear'], 'Kohaku公式初期値はcosine。state再開では元の設定を維持'),
+        'kohaku_train_target': ('Kohaku: 学習対象', 'ffn-down', ['ffn-down', 'attn-mlp', 'attn'], 'ffn-down: FFN_downのみ / attn-mlp: Attention＋FFN / attn: Attentionのみ。対象を変更するときは新規学習してください'),
+        'learning_rate': ('学習率', 0.00005, None, '固定の最適値ではありません。データセットに応じて調整'),
+        'optimizer_type': ('Optimizer', 'AdamW', ['AdamW', 'AdamW8bit', 'CAME', 'Adafactor'], '両エンジンの初期値はAdamW。CAMEは「かんたん導入」で必要パッケージを追加。Adafactorはsd-scripts専用'),
+        'lr_scheduler': ('LR scheduler', 'cosine', ['constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear'], '初期値cosine。cosine_with_restartsは周期ごとに学習率を上げ直します。state再開では元の設定を維持'),
+        'lr_scheduler_num_cycles': ('Restart周期数', 2, None, 'cosine_with_restarts専用。2は2周期（途中の再スタート1回）。warmupは学習開始時のみ'),
         'lr_warmup_steps': ('Warmup steps', 100, None, 'Kohaku公式初期値100。開始時に学習率を徐々に上げるstep数。constantでは使用しません'),
-        'kohaku_lr_min_ratio': ('Kohaku: 最小学習率の比率', 0.1, None, 'cosine専用。0.1は初期学習率の10%。既存設定の未指定値は従来の0を維持'),
+        'kohaku_lr_min_ratio': ('Kohaku: 最小学習率の比率', 0.1, None, 'cosine・cosine_with_restarts専用。0.1は初期学習率の10%。既存設定の未指定値は従来の0を維持'),
         'max_train_epochs': ('学習エポック数（steps=0 時）', 10, None, '最大 steps が 0 の場合だけ使用'),
-        'max_train_steps': ('最大 steps（0: エポック指定）', 4000, None, 'このGUIの開始値4000。画像数・学習対象に応じて調整'),
+        'max_train_steps': ('最大 steps（0: エポック指定）', 2000, None, 'このGUIの開始値2000。画像数・学習対象に応じて調整'),
         'gradient_accumulation_steps': ('勾配累積', 1, None, '実効バッチ数 = バッチサイズ × 勾配累積'),
         'max_grad_norm': ('勾配クリップ', 1.0, None, 'Adafactor 選択時は書き出し時に 0 を使用'),
         'save_every_n_epochs': ('何エポックごとに保存（0: 無効）', 0, None, ''),
-        'save_every_n_steps': ('何 steps ごとに保存（0: 無効）', 200, None, 'このGUIの初期値200。LoRAと再開用stateを保存する間隔'),
+        'save_every_n_steps': ('何 steps ごとに保存（0: 無効）', 100, None, 'このGUIの初期値100。LoRAと再開用stateを保存する間隔'),
         'save_state': ('再開用の optimizer state も保存', True, None, 'モデルの保存間隔に合わせて保存。ディスク使用量が増えます'),
         'keep_latest_state_only': ('state は最新の1つだけ保持', True, None, '新しいstateの保存成功後に、この実行で作成した古いstateだけを削除。LoRAは削除しません'),
         'save_state_on_train_end': ('正常終了時にも state を保存', True, None, '強制停止時には保存できません。直近の保存済み state から再開'),
@@ -90,11 +92,11 @@ FIELDS = {
         'compile': ('torch.compile', False, None, '追加環境が必要。まず OFF で動作を確認'),
     },
     'flow': {
-        'timestep_sampling': ('Timestep sampling', 'sigma', ['sigma', 'uniform', 'sigmoid', 'shift', 'flux_shift'], 'sigma + logit_normal は公式ガイドの検証設定'),
+        'timestep_sampling': ('Timestep sampling', 'shift', ['sigma', 'uniform', 'sigmoid', 'shift', 'flux_shift'], '初期値shift。Kohakuはshiftとsigmaに対応。sigmaは従来のMOSS方式'),
         'weighting_scheme': ('Weighting scheme', 'logit_normal', ['logit_normal', 'uniform', 'sigma_sqrt', 'cosmap', 'none', 'mode'], ''),
         'logit_mean': ('Logit mean', -1.09, None, ''),
         'logit_std': ('Logit std', 0.95, None, ''),
-        'discrete_flow_shift': ('学習用 flow shift', 1.0, None, 'sigma: 1.0。shift の近似設定なら 3.0'),
+        'discrete_flow_shift': ('学習用 flow shift', 3.0, None, 'shiftの開始値3.0。従来のsigma設定は1.0。サンプル生成用のshiftとは別'),
         'sigmoid_scale': ('Sigmoid scale', 1.0, None, ''),
         'mode_scale': ('Mode scale', 1.29, None, 'weighting_scheme=mode の場合に使用'),
         'train_text_embedder': ('DiT の Text embedder も学習', False, None, 'Qwen の学習とは別。TE キャッシュと併用可'),
@@ -132,8 +134,9 @@ def defaults(backend_name='kohaku'):
         settings['memory']['backend'] = 'sd-scripts'
         settings['training'].update(network_dim=16, network_alpha=1.0, optimizer_type='AdamW8bit',
                                     lr_scheduler='constant', lr_warmup_steps=0, kohaku_lr_min_ratio=0.0,
-                                    max_train_steps=1500, save_every_n_steps=100)
+                                    max_train_steps=1500, save_every_n_steps=100, kohaku_train_target='attn-mlp', learning_rate=0.0001)
         settings['dataset']['caption_dropout_rate'] = 0.05
+        settings['flow'].update(timestep_sampling='sigma', discrete_flow_shift=1.0)
     return settings
 
 
@@ -271,8 +274,16 @@ def validate(project, env=None, files=False):
             require(d[key] % d['bucket_reso_steps'] == 0, tr('{p0}: Bucket 刻みの倍数にしてください', p0=key))
     require(d['batch_size'] >= 1, tr('バッチサイズは 1 以上にしてください'))
     require(1 <= s['model']['moss_max_token_length'] <= 4096, tr('最大トークン数は 1〜4096 にしてください'))
-    for key in ('network_dim', 'network_alpha', 'learning_rate', 'max_train_epochs', 'gradient_accumulation_steps'):
+    for key in ('network_dim', 'network_alpha', 'learning_rate', 'gradient_accumulation_steps'):
         require(t[key] > 0, tr('{p0}: 0 より大きい値が必要です', p0=key))
+    require(t['max_train_epochs'] >= 0, tr('{p0}: 0 以上にしてください', p0='max_train_epochs'))
+    if t['max_train_steps'] == 0:
+        require(t['max_train_epochs'] > 0, tr('{p0}: 0 より大きい値が必要です', p0='max_train_epochs'))
+    if t['lr_scheduler'] == 'cosine_with_restarts':
+        require(t['lr_scheduler_num_cycles'] > 0, tr('Restart周期数は1以上にしてください。'))
+        if t['max_train_steps'] > 0:
+            require(t['max_train_steps'] - t['lr_warmup_steps'] >= t['lr_scheduler_num_cycles'],
+                    tr('再スタートにはwarmup後に周期数以上のSTEP数が必要です。'))
     for key in ('max_train_steps', 'lr_warmup_steps', 'save_every_n_steps', 'save_every_n_epochs', 'max_grad_norm', 'seed'):
         require(t[key] >= 0, tr('{p0}: 0 以上にしてください', p0=key))
     require(bool(re.fullmatch(r'[^<>:"/\\|?*\x00-\x1f]+', t['output_name'])) and t['output_name'] not in ('.', '..') and not t['output_name'].endswith((' ', '.')), tr('出力 LoRA 名に使用できない文字があります'))
@@ -417,11 +428,15 @@ def resume_differences(project, info):
         'model': tuple(FIELDS['model']), 'dataset': tuple(FIELDS['dataset']),
         'flow': tuple(FIELDS['flow']),
         'memory': ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'),
-        'training': ('network_dim', 'network_alpha', 'optimizer_type', 'lr_scheduler', 'learning_rate',
-                     'lr_warmup_steps', 'kohaku_lr_min_ratio', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
+        'training': ('network_dim', 'network_alpha', 'kohaku_train_target', 'optimizer_type', 'lr_scheduler', 'learning_rate',
+                     'lr_warmup_steps', 'lr_scheduler_num_cycles', 'kohaku_lr_min_ratio', 'gradient_accumulation_steps', 'max_grad_norm', 'seed'),
     }.items():
         for key in keys:
-            if key == 'kohaku_lr_min_ratio' and (backend(project['settings']) != 'kohaku' or project['settings']['training']['lr_scheduler'] != 'cosine'):
+            if key == 'kohaku_train_target' and backend(project['settings']) != 'kohaku':
+                continue
+            if key == 'lr_scheduler_num_cycles' and project['settings']['training']['lr_scheduler'] != 'cosine_with_restarts':
+                continue
+            if key == 'kohaku_lr_min_ratio' and (backend(project['settings']) != 'kohaku' or project['settings']['training']['lr_scheduler'] not in ('cosine', 'cosine_with_restarts')):
                 continue
             if (group == 'memory' and key == 'kohaku_memory_profile'
                     and backend(project['settings']) == 'kohaku'
@@ -500,6 +515,9 @@ def training_config(project, run_dir):
     for key in ('backend', 'kohaku_memory_profile', 'kohaku_base_precision', 'kohaku_max_tokens'):
         config.pop(key, None)
     config.pop('kohaku_lr_min_ratio', None)  # Kohaku-only scheduler parameter
+    config.pop('kohaku_train_target', None)
+    if config['lr_scheduler'] != 'cosine_with_restarts':
+        config.pop('lr_scheduler_num_cycles', None)
     config.pop('keep_latest_state_only', None)
     config.pop('num_cpu_threads_per_process', None)  # accelerate launch option, not a trainer argument
     if not s['training']['resume']:
@@ -514,6 +532,8 @@ def training_config(project, run_dir):
     if config['optimizer_type'] == 'Adafactor':
         config['optimizer_args'] = ['relative_step=False', 'scale_parameter=False', 'warmup_init=False']
         config['max_grad_norm'] = 0.0
+    if config['optimizer_type'] == 'CAME':
+        config['optimizer_type'] = 'pytorch_optimizer.CAME'
     if config['cpu_offload_checkpointing'] or config['unsloth_offload_checkpointing']:
         config['gradient_checkpointing'] = True
     f = s['flow']
@@ -690,7 +710,7 @@ def dataset_report(project):
 
 PROBE_CODE = '''import json, importlib.util
 r={}
-for m in ('torch','accelerate','safetensors','transformers','bitsandbytes','tensorboard','triton','xformers','flash_attn','kohakumoss','kohakuengine'):
+for m in ('torch','accelerate','safetensors','transformers','bitsandbytes','tensorboard','triton','xformers','flash_attn','kohakumoss','kohakuengine','pytorch_optimizer'):
  r[m]=importlib.util.find_spec(m) is not None
 if r['torch']:
  import torch
@@ -729,6 +749,8 @@ def probe_errors(info, settings):
         required = ['torch', 'safetensors', 'transformers', 'kohakumoss', 'kohakuengine', 'triton']
     if settings['training']['optimizer_type'] == 'AdamW8bit':
         required.append('bitsandbytes')
+    if settings['training']['optimizer_type'] == 'CAME':
+        required.append('pytorch_optimizer')
     if not kohaku and settings['memory']['attn_mode'] != 'torch':
         required.append({'xformers': 'xformers', 'flash': 'flash_attn'}[settings['memory']['attn_mode']])
     errors = [tr('{p0} が学習用 Python にインストールされていません', p0=m) for m in required if not info.get(m)]

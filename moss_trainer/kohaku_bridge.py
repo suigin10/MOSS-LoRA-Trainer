@@ -12,6 +12,8 @@ def main():
     if threads < 1:
         raise ValueError('CPU threads must be positive')
     env = dict(os.environ, FORCE_COLOR='1', OMP_NUM_THREADS=str(threads), MKL_NUM_THREADS=str(threads))
+    # Config checker and training resolve the GUI's custom CAME builder by module path.
+    env['PYTHONPATH'] = os.pathsep.join(filter(None, (str(Path(__file__).resolve().parent), env.get('PYTHONPATH'))))
     snapshot = json.loads((run_dir / 'project_snapshot.json').read_text(encoding='utf-8'))
     cache = snapshot['settings']['model']['tokenizer_cache_dir']
     if cache:

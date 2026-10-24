@@ -22,6 +22,32 @@ class GuiTests(unittest.TestCase):
         self.addCleanup(self.app.destroy)
         self.app.update()
 
+    def test_restart_cycle_field_only_enabled_for_restart_scheduler(self):
+        cycles = self.app.field_widgets[('training', 'lr_scheduler_num_cycles')]
+        self.assertTrue(cycles.instate(['disabled']))
+        self.app.variables[('training', 'lr_scheduler')].set('cosine_with_restarts')
+        self.assertFalse(cycles.instate(['disabled']))
+        self.assertEqual(cycles.get(), '2')
+        cycles.delete(0, 'end')
+        cycles.insert(0, '3')
+        self.app.variables[('training', 'lr_scheduler')].set('cosine')
+        self.assertTrue(cycles.instate(['disabled']))
+        self.app.variables[('memory', 'backend')].set('kohaku')
+        self.app.variables[('training', 'lr_scheduler')].set('cosine_with_restarts')
+        self.assertEqual(self.app.collect()['settings']['training']['lr_scheduler_num_cycles'], 3)
+        self.assertFalse(cycles.instate(['disabled']))
+
+    def test_kohaku_target_is_preserved_when_switching_engines(self):
+        selector = self.app.field_widgets[('training', 'kohaku_train_target')]
+        self.assertEqual(str(selector.cget('state')), 'disabled')
+        self.app.variables[('memory', 'backend')].set('kohaku')
+        self.assertEqual(str(selector.cget('state')), 'readonly')
+        self.app.variables[('training', 'kohaku_train_target')].set('ffn-down')
+        self.app.variables[('memory', 'backend')].set('sd-scripts')
+        self.assertEqual(self.app.collect()['settings']['training']['kohaku_train_target'], 'ffn-down')
+        self.app.variables[('memory', 'backend')].set('kohaku')
+        self.assertEqual(self.app.collect()['settings']['training']['kohaku_train_target'], 'ffn-down')
+
     def test_preflight_does_not_repeat_dataset_details(self):
         with patch('moss_trainer.gui.validate', return_value=[]), \
              patch('moss_trainer.gui.dataset_report', side_effect=AssertionError('dataset details belong in their own action')), \
@@ -173,7 +199,7 @@ class GuiTests(unittest.TestCase):
             widget.tk.call(listing, 'selection', 'set', 1)
             widget.tk.call('ttk::combobox::LBSelected', listing)
             self.app.update()
-            self.assertEqual(widget.get(), 'AdamW')
+            self.assertEqual(widget.get(), 'AdamW8bit')
         finally:
             widget.tk.call('ttk::combobox::Unpost', str(widget))
 
@@ -250,7 +276,7 @@ class GuiTests(unittest.TestCase):
         project = self.app.collect()
         self.assertEqual(project['settings']['model']['vae'], 'D:/models/vae.safetensors')
         self.assertEqual(project['settings']['model']['text_encoder'], 'D:/models/qwen.safetensors')
-        self.assertEqual(project['settings']['training']['learning_rate'], 0.0001)
+        self.assertEqual(project['settings']['training']['learning_rate'], 0.00005)
         self.assertEqual(project['subsets'][0]['image_dir'], '')
 
     def test_delete_last_project_and_add_again_with_models_retained(self):
@@ -318,6 +344,28 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(p['settings']['training']['max_train_steps'], 1200)
         self.assertEqual(p['settings']['samples']['sample_every_n_steps'], 250)
         self.assertEqual(p['settings']['training']['save_every_n_steps'], 100)
+
+    def test_zero_steps_and_epochs_do_not_lock_entries(self):
+        steps = self.app.field_widgets[('training', 'max_train_steps')]
+        epochs = self.app.field_widgets[('training', 'max_train_epochs')]
+        steps.delete(0, 'end')
+        steps.insert(0, '0')
+        self.assertFalse(steps.instate(['disabled']))
+        self.assertFalse(epochs.instate(['disabled']))
+        epochs.delete(0, 'end')
+        epochs.insert(0, '0')
+        self.assertFalse(steps.instate(['disabled']))
+        self.assertFalse(epochs.instate(['disabled']))
+        steps.delete(0, 'end')
+        steps.insert(0, '1200')
+        self.assertEqual(self.app.collect()['settings']['training']['max_train_steps'], 1200)
+        self.assertEqual(self.app.stop_mode.get(), 'steps')
+        self.assertTrue(epochs.instate(['disabled']))
+        steps.delete(0, 'end')
+        steps.insert(0, '0')
+        self.app.stop_mode.set('steps')
+        self.app.set_stop_mode()
+        self.assertEqual(steps.get(), '1200')
 
     def test_epoch_and_step_switch_keeps_editable_values(self):
         self.app.variables[('training', 'max_train_steps')].set('1200')

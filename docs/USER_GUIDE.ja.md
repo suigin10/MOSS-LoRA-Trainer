@@ -72,8 +72,10 @@ sd-scripts の環境要件を優先してください。GUI と学習用 Python 
 
 ## 初期値と変更方法
 
-新規学習は32/32・AdamW8bit・cosine、学習上限4000STEP・200STEPごと保存が初期値です。Kohaku公式レシピを参考に、Optimizerは省メモリのAdamW8bit、保存間隔は200STEPにしています。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
-UIの値は保存済みプロジェクトの設定です。更新だけで既存値を公式初期値へ上書きしません。
+新規学習は32/32・AdamW・学習率5e-5・cosine、FFN_downのみ・学習上限2000STEP・100STEPごと保存が初期値です。このGUIではOptimizerは両エンジンともAdamW、学習対象はFFN_downのみ、保存間隔は100STEPにしています。「03 学習」のKohaku学習対象でattn-mlp（Attention＋FFN）・attn（Attentionのみ）にも切り替えられます。対象変更時は新規学習を開始してください。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
+UIの値は保存済みプロジェクトの設定です。更新だけで既存値を新しい初期値へ上書きしません。
+CAMEも選択できます。必要パッケージは「かんたん導入」で追加します。既定のSchedulerはcosineです。比較用のcosine_with_restartsも選べます。Restart周期数は初期値2（2周期・再スタート1回）で、この方式を選んだときだけ編集できます。
+Timestepの新規初期値はshift、学習用flow shiftは3.0です。Kohakuも対応します。方式を変える場合はstateを外して新規学習してください。自然文キャプションではCaption dropoutを0にすることを推奨します。
 キャプション単体の上限は「01モデル」、画像＋テキストの合計上限は「04 VRAM」のKohaku設定です。
 
 ### LoRAとstateの保存
@@ -118,7 +120,7 @@ Attention は初期値の `torch` を推奨します。`xformers` を選ぶと�
 
 「設定をエクスポート」で作られたフォルダには、再読み込み用の `project_snapshot.json` が入っています。「設定を読み込む」からこの JSON を選ぶと、設定・モデルパス・画像パスを確認したうえで、新しいプロジェクトとして取り込めます。保存済みプロジェクトの `project.json` や、実行履歴の `project_snapshot.json` も使用できます。
 
-読み込み時は学習・生成設定、モデルと画像のパス、出力 LoRA 名を復元します。実行履歴は取り込まず、state 再開と初期 LoRA 重みの指定は解除します。このPCの Python / sd-scripts の共通設定を使用します。別PCのパスが存在しなくても取り込めるので、読み込み後に「参照…」で選び直してください。未対応の形式や不正な型は読み込み時にエラーを表示します。古い版で省略されている項目は初期値を補います。
+読み込み時は学習・生成設定、モデルと画像のパス、出力 LoRA 名を復元します。実行履歴は取り込まず、state 再開と初期 LoRA 重みの指定は解除します。このPCに登録された学習エンジンの専用環境を使用します。別PCのパスが存在しなくても取り込めるので、読み込み後に「参照…」で選び直してください。未対応の形式や不正な型は読み込み時にエラーを表示します。古い版で省略されている項目は初期値を補います。
 
 対象は MOSS Studio が書き出す設定 JSON です。`train.toml` / `dataset.toml` を直接編集した内容を取り込む機能や、他GUIの設定形式の変換は含みません。
 
@@ -136,9 +138,9 @@ Attention は初期値の `torch` を推奨します。`xformers` を選ぶと�
 2. 保存済みstateを選び、「元のモデル・データ・学習設定を復元」をONにします。外部のstateはフォルダ選択できます。
 3. 総STEP / Epoch上限を変えずに適用すると、保存したOptimizer・scheduler・累積STEPから元の計画を続けます。
 
-### 最終stateから追加学習・総上限の変更
+### 最終stateから追加学習・総上限の変更（sd-scripts）
 
-同じ画面で最終stateを選び、総上限を増やします。例: 保存STEPが1500で、総STEP上限を3000にすると、累積1500から再開して1500 STEP分を追加します。次の更新は1501、100 STEP保存なら次の保存は1600です。上限は追加分のSTEP数ではありません。Epoch指定のプロジェクトでは総Epoch上限を編集します。
+sd-scriptsでは同じ画面で最終stateを選び、総上限を増やします。Kohakuはconstantの場合だけ総STEP上限を増やせます。cosineなどでは元の総STEPを維持してください。例: 保存STEPが1500で、総STEP上限を3000にすると、累積1500から再開して1500 STEP分を追加します。次の更新は1501、100 STEP保存なら次の保存は1600です。上限は追加分のSTEP数ではありません。Epoch指定のプロジェクトでは総Epoch上限を編集します。
 
 上限変更時もOptimizerのモーメントや更新回数、乱数状態と累積STEPを復元します。ただし、LRスケジュールの計算には総STEP数が使われるため、**LRは新しい総上限の曲線上の保存STEP位置で再計算します**。constantは一定のまま、linear / cosineは再開時のLRが変わります。元の最終STEPでLRが0になっていても、上限を延ばすことで新しい曲線のLRで追加学習できます。Optimizerやschedulerを空回ししてSTEPを合わせる処理は行いません。保存schedulerの更新回数と `train_state.json` のSTEPが一致しない場合は、誤った補正を避けるため停止します。
 
@@ -148,9 +150,9 @@ Attention は初期値の `torch` を推奨します。`xformers` を選ぶと�
 
 再開は新しい実行フォルダを作り、`resume_source.json` に元stateのパスと進捗、`state_policy.json` にLR再計算とstate保持方針を記録します。以前の実行結果や再開元stateは上書きしません。「停止」は強制終了のため、未保存の進捗は失われます。直近の保存が完了したstateを選択してください。旧版で既にずれたSTEPのまま再保存したstateの履歴は、この補正だけでは復元できません。
 
-### LoRA重みから新しいOptimizerで追加学習
+### LoRA重みから新しいOptimizerで追加学習（sd-scripts）
 
-「再開指定を解除」後に「初期 LoRA 重み」を指定します。この場合はOptimizerとschedulerを新規に作り、STEPを0から数えます。stateとの同時指定はできません。
+sd-scriptsで「再開指定を解除」後に「初期 LoRA 重み」を指定します。Kohaku接続はこの方法に未対応です。この場合はOptimizerとschedulerを新規に作り、STEPを0から数えます。stateとの同時指定はできません。
 
 ## 実行結果・ログ
 
@@ -218,7 +220,7 @@ Tritonは両環境へ自動導入します。Windowsでは `triton-windows` を�
 
 実行順は設定チェック→テキストキャッシュ→Latentキャッシュ→学習です。いずれかが失敗すれば次の処理を実行しません。キャッシュはプロジェクト内の `kohaku-cache` に置き、異なるモデルのキャッシュを混ぜないようにします。
 
-Kohakuは独自のMOSS objective、自然な縦横比に沿う解像度計画、LoRAターゲットのプリセットを使用します。sd-scriptsと同一の学習挙動・品質になるとは限りません。bucket刻み・最大最小解像度はKohakuの解像度計画へそのまま対応しません。
+KohakuはMSE lossと専用の解像度計画、LoRAターゲット指定を使用します。timestepはshift（新規初期値）と従来のsigmaを選べます。sd-scriptsと同一の学習挙動・品質になるとは限りません。bucket刻み・最大最小解像度はKohakuの解像度計画へそのまま対応しません。
 
 実行フォルダ:
 

@@ -23,7 +23,18 @@ GPU学習の完走結果は歓迎します。成功条件・モデル・設定�
 
 ## 検証状況
 
-確認日: 2026-10-21。Windows / Python 3.12 / RTX 4070 12GB。
+### v0.2.2 — 2026-10-24
+
+- 利用者より、RTX 4070 12GBで現行デフォルト設定の学習完走を報告。新規初期値はFFN_downのみ・32/32・AdamW・LR 5e-5・cosine・warmup 100・下限10%・shift 3.0・2000STEP・100STEP保存。現行設定の速度やVRAMの数値は未測定。
+- 自動テスト163件成功。学習対象、CAMEと依存チェック、shift、再スタート付きcosine、STEP/Epoch入力、翻訳、旧設定移行と再開差分を確認。
+- 実際のKohaku/LyCORISで小さなCPUモデルを使用し、FFN_down・Attention＋FFN・Attentionの対象層が一致することを確認。
+- Kohakuのshift samplerは4096サンプルでsd-scriptsの計算式と一致。CAMEは実際のoptimizer接続でCPU更新・state復元後の重み一致を確認。
+- 再スタート付きcosineは下限0%・10%の各2501点で基準曲線と一致。AdamW・CAMEで再スタート直前・直後のstate復元後も重み一致。Kohakuの割り切れない周期は整数STEPに分割する。
+- CAMEと再スタート付きcosineのGPU本学習・生成品質比較、新規専用環境への導入完走は未確認。pytorch-optimizer 4.0.0の既存Kohaku環境への追加とpip checkは成功。
+
+### 過去の実機報告・診断
+
+以下は2026-10-21時点の記録。Windows / Python 3.12 / RTX 4070 12GB。
 
 - resident初期値の変更後、自動テスト146件成功。設定ガイドをMarkdownへ移した後、GUI・翻訳8件とガイドボタンの読み込みを再確認。
 - 利用者のRTX 4070 12GB実機で、Kohakuの4000STEP学習完走・サンプル生成・最終LoRA出力を確認（2026-10-21報告）。実行スナップショットは32/32・AdamW8bit・LR 1e-4・cosine・4000STEP・200STEPごと保存・ckpt-resident・auto・画像＋テキスト上限6144。サンプル生成ON（250STEPごと）。status.jsonはcompleted・returncode 0。
@@ -39,7 +50,7 @@ GPU学習の完走結果は歓迎します。成功条件・モデル・設定�
 
 ### 参照ソース
 
-- MOSS-LoRA-Trainer: 6a12d8bbce7340a990db7152abfb39e78a5d2d7c
+- 過去のGPU診断時のMOSS-LoRA-Trainer: 6a12d8bbce7340a990db7152abfb39e78a5d2d7c
 - KohakuMossTrainer固定先: 0c4737e3b8787a7df0f2d28a2972640a5f8522f6
 
 ### torch.compileの診断

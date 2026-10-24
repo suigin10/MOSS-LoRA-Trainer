@@ -475,7 +475,7 @@ class App(tk.Tk):
                 resumebar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 12))
                 ttk.Button(resumebar, text=tr('stateから再開・追加学習…'), command=self.resume_dialog).pack(side='left')
                 ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
-                ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値200 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
+                ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値100 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
                 row = 2
             elif group == 'memory':
                 presets = ttk.Frame(page.body)
@@ -494,6 +494,8 @@ class App(tk.Tk):
         self.variables[('training', 'max_train_steps')].trace_add('write', lambda *args: self.update_stop_mode())
         for key in ('attn_mode', 'split_attn'):
             self.variables[('memory', key)].trace_add('write', lambda *args: self.sync_attention())
+        self.variables[('memory', 'backend')].trace_add('write', lambda *args: self.sync_kohaku_target())
+        self.variables[('training', 'lr_scheduler')].trace_add('write', lambda *args: self.sync_scheduler())
         self.build_monitor()
         timingbar = ttk.Frame(self, padding=(24, 8, 24, 0))
         timingbar.grid(row=4, column=0, sticky='ew')
@@ -649,6 +651,8 @@ class App(tk.Tk):
             value = project['settings'][group][key]
             var.set(alpha_text(value) if key == 'network_alpha' else value)
         self.sync_attention()
+        self.sync_kohaku_target()
+        self.sync_scheduler()
         for (group, key), widget in self.texts.items():
             widget.delete('1.0', 'end')
             widget.insert('1.0', project['settings'][group][key])
@@ -688,6 +692,14 @@ class App(tk.Tk):
                 raise ValueError(tr('Repeat は整数で入力してください'))
             result['subsets'].append({'image_dir': path.get().strip(), 'num_repeats': count, 'class_tokens': tokens.get()})
         return result
+
+    def sync_scheduler(self):
+        self.field_widgets[('training', 'lr_scheduler_num_cycles')].configure(
+            state='normal' if self.variables[('training', 'lr_scheduler')].get() == 'cosine_with_restarts' else 'disabled')
+
+    def sync_kohaku_target(self):
+        self.field_widgets[('training', 'kohaku_train_target')].configure(
+            state='readonly' if self.variables[('memory', 'backend')].get() == 'kohaku' else 'disabled')
 
     def sync_attention(self):
         if getattr(self, '_syncing_attention', False):
@@ -793,17 +805,26 @@ class App(tk.Tk):
             except ValueError:
                 pass
             var.set(0)
-        elif var.get() == '0':
-            var.set(self.step_memory.get(pid, FIELDS['training']['max_train_steps'][1]))
+        else:
+            try:
+                current = int(var.get())
+            except ValueError:
+                current = 0
+            if current <= 0:
+                var.set(self.step_memory.get(pid, FIELDS['training']['max_train_steps'][1]))
         self.update_stop_mode()
 
     def update_stop_mode(self):
+        # Keep the STEP entry editable even at zero or during partial input.
+        # Updating its state inside a StringVar trace used to interrupt editing.
+        self.field_widgets[('training', 'max_train_steps')].configure(state='normal')
         try:
             steps = int(self.variables[('training', 'max_train_steps')].get())
         except ValueError:
             return
         self.stop_mode.set('epochs' if steps == 0 else 'steps')
-        self.field_widgets[('training', 'max_train_steps')].configure(state='disabled' if steps == 0 else 'normal')
+        if steps > 0 and self.project is not None:
+            self.step_memory[self.project['id']] = steps
         self.field_widgets[('training', 'max_train_epochs')].configure(state='normal' if steps == 0 else 'disabled')
 
     def resume_dialog(self):

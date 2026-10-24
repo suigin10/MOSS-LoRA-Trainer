@@ -29,6 +29,19 @@ class CoreTests(unittest.TestCase):
         (self.images / '猫.txt').write_text('A cat.\nLong caption.', encoding='utf-8')
         self.p['subsets'][0]['image_dir'] = str(self.images)
 
+    def test_zero_epochs_are_allowed_only_when_steps_are_active(self):
+        t = self.p['settings']['training']
+        t.update(max_train_steps=1200, max_train_epochs=0)
+        self.assertEqual(validate(self.p), [])
+        self.assertNotIn('max_train_epochs', training_config(self.p, self.root))
+        t['max_train_steps'] = 0
+        self.assertTrue(validate(self.p))
+        t['max_train_epochs'] = 8
+        self.assertEqual(validate(self.p), [])
+        config = training_config(self.p, self.root)
+        self.assertEqual(config['max_train_epochs'], 8)
+        self.assertNotIn('max_train_steps', config)
+
     def test_12gb_defaults_valid(self):
         self.assertEqual(validate(self.p), [])
         s = self.p['settings']

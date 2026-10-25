@@ -28,6 +28,14 @@ GUIはPython標準のtkinterで動作します。学習用パッケージとTrit
 - **学習方式：** LoRA / LoKr / LoHaを選択可能。「キャラクターLoKr」プリセットで学習条件を一括設定できます（機能・設定値は実験的）。cosine・再スタート付きcosine・polynomialなどのSchedulerに対応します。
 - **LoRA出力：** KohakuはComfyUI形式・LyCORIS形式で保存。GUIの表示言語は日本語／英語を切り替えられます。
 
+## キャラクターLoKrの実機確認・生成物の配布
+
+RTX 4070 12GBで、KohakuのキャラクターLoKr（Rank / Alpha 32 / 32・attn-mlp・4000STEP）の学習完走を利用者の実機で確認しました。プリセットの機能・設定値は引き続き実験的です。
+
+**学習した生成物の配布には、小さいLyCORIS版（`*-lycoris.safetensors`）を推奨します。** 今回の確認例ではLyCORIS版が約18MB、ComfyUI版が約2.2GBでした。ComfyUI版はQKVの互換性変換で大きくなる場合があり、容量差は学習内容を削ったことによるものではありません。
+
+現在のComfyUIはLoKrとMOSSの分離QKVに対応しています。配布時は使用した学習ベースモデル・通常版／EMA版・動作確認した生成環境を記載してください。
+
 ## ガイド
 
 | 知りたいこと | ドキュメント |

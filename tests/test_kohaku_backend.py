@@ -46,7 +46,7 @@ class KohakuTests(unittest.TestCase):
         self.assertEqual(values['LR'], 1e-4)
         self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
         self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (2500, 100, 0.1))
-        self.assertEqual(values['PRESET'], {'target_name': [r'layers\.\d+\.proj\.ffn_down$']})
+        self.assertEqual(values['PRESET'], 'attn-mlp')
         self.assertEqual(values['TIMESTEP'], 'moss')
         self.assertEqual(values['TIMESTEP_KWARGS'], {'mu': -1.09, 's': 0.95, 'shift': 1.0, 'cutoff': 0.95, 'uniform_mix': 0.01})
         self.assertNotIn('kohaku_lr_min_ratio', training_config(fresh, self.root))

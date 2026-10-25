@@ -70,6 +70,13 @@ class EnglishGuiTests(unittest.TestCase):
         self.app.change_language()
         self.app.update()
 
+    def test_folder_buttons_are_translated_with_icons(self):
+        self.switch()
+        self.assertEqual(self.app.project_folder_button.cget('text'), 'Project folder')
+        self.assertEqual(self.app.run_folder_button.cget('text'), 'Latest training folder')
+        self.assertTrue(self.app.project_folder_button.cget('image'))
+        self.assertTrue(self.app.run_folder_button.cget('image'))
+
     def test_character_lokr_button_is_translated_and_applies_recipe(self):
         self.switch()
         self.assertEqual(self.app.character_lokr_button.cget('text'), 'Character LoKr (experimental)')

@@ -520,5 +520,8 @@
   "LoKr factor 8 / 512px / batch 2 × 勾配累積 2": "LoKr factor 8 / 512px / batch 2 × accumulation 2",
   "キャラクターLoKrを適用しました（未保存）": "Character LoKr applied (unsaved)",
   "キャラクターLoKr（実験的）": "Character LoKr (experimental)",
-  "機能・設定値は実験的です。LoKr factor 8 / 512px / batch 2 × 勾配累積 2": "The feature and settings are experimental. LoKr factor 8 / 512px / batch 2 × accumulation 2"
+  "機能・設定値は実験的です。LoKr factor 8 / 512px / batch 2 × 勾配累積 2": "The feature and settings are experimental. LoKr factor 8 / 512px / batch 2 × accumulation 2",
+  "プロジェクトフォルダ": "Project folder",
+  "最新の学習フォルダ": "Latest training folder",
+  "プロジェクトフォルダ＝設定・全学習履歴 ／ 最新の学習フォルダ＝1回分のモデル・ログ": "Project folder: settings and all training runs / Latest training folder: models and logs for one run"
 }

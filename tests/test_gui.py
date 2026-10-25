@@ -54,9 +54,10 @@ class GuiTests(unittest.TestCase):
         current = self.app.collect()['settings']
         self.assertEqual((current['training']['network_dim'], current['training']['network_alpha']), (16, 16))
         self.assertEqual(current['training']['max_train_steps'], 2500)
+        self.assertEqual(current['training']['kohaku_train_target'], 'attn-mlp')
         self.assertEqual(current['training']['save_every_n_steps'], 100)
         self.assertEqual((current['flow']['timestep_sampling'], current['flow']['discrete_flow_shift']), ('sigma', 1.0))
-        fresh['settings']['training'].update(network_dim=32, network_alpha=32, max_train_steps=2000)
+        fresh['settings']['training'].update(network_dim=32, network_alpha=32, max_train_steps=2000, kohaku_train_target='ffn-down')
         fresh['settings']['flow'].update(timestep_sampling='shift', discrete_flow_shift=3.0)
         self.app.store.save(fresh)
         old = self.app.store.load(self.app.store.directory(fresh) / 'project.json')
@@ -75,7 +76,10 @@ class GuiTests(unittest.TestCase):
         current = self.app.collect()
         t = current['settings']['training']
         self.assertEqual((t['network_algo'], t['lokr_factor'], t['kohaku_ema']), ('LoKr', 8, .99))
-        self.assertEqual((t['max_train_steps'], t['resume']), (2500, ''))
+        self.assertEqual((t['max_train_steps'], t['resume']), (4000, ''))
+        self.assertEqual((t['network_dim'], t['network_alpha']), (32, 32.0))
+        self.assertEqual(t['kohaku_train_target'], 'attn-mlp')
+        self.assertEqual(current['settings']['memory']['blocks_to_swap'], 0)
         self.assertEqual(current['settings']['dataset']['resolution'], 512)
         self.assertEqual(current['settings']['model']['vae'], 'C:/existing-vae.safetensors')
         self.assertEqual(self.app.project['settings']['training']['network_algo'], 'LoRA')
@@ -342,6 +346,23 @@ class GuiTests(unittest.TestCase):
         dialog.create()
         self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 16)
         self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
+
+    def test_project_and_latest_training_folder_buttons_open_distinct_locations(self):
+        root = self.app.store.directory(self.app.project)
+        latest = root / 'runs' / '20261025_120000_latest'
+        older = root / 'runs' / '20261024_120000_older'
+        latest.mkdir(parents=True)
+        older.mkdir()
+        self.app.load_project(self.app.project)
+        self.assertEqual(self.app.last_folder, latest)
+        self.assertTrue(self.app.project_folder_button.cget('image'))
+        self.assertTrue(self.app.run_folder_button.cget('image'))
+        self.assertEqual(self.app.project_folder_button.cget('text'), 'プロジェクトフォルダ')
+        self.assertEqual(self.app.run_folder_button.cget('text'), '最新の学習フォルダ')
+        with patch.object(self.app, 'open_folder') as opened:
+            self.app.project_folder_button.invoke()
+            self.app.run_folder_button.invoke()
+        self.assertEqual([call.args[0] for call in opened.call_args_list], [root, latest])
 
     def test_busy_locks_project_controls(self):
         self.app.set_busy(True, 'テスト中')

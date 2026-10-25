@@ -49,7 +49,7 @@ FIELDS = {
         'lokr_factor': ('LoKr factor', -1, None, 'LoKr専用。-1は自動分解、正の整数で分解係数を指定（例: 8）。Rankが同じでも方式によりパラメーター数が異なります'),
         'network_dim': ('Rank / dim', 16, None, 'このGUIの初期値16。方式・データセットに応じて調整'),
         'network_alpha': ('Alpha', 16.0, None, 'このGUIの初期値16。Rank・Alphaはstate再開時に変更できません'),
-        'kohaku_train_target': ('Kohaku: 学習対象', 'ffn-down', ['ffn-down', 'attn-mlp', 'attn'], 'ffn-down: FFN_downのみ / attn-mlp: Attention＋FFN / attn: Attentionのみ。対象を変更するときは新規学習してください'),
+        'kohaku_train_target': ('Kohaku: 学習対象', 'attn-mlp', ['ffn-down', 'attn-mlp', 'attn'], 'ffn-down: FFN_downのみ / attn-mlp: Attention＋FFN / attn: Attentionのみ。対象を変更するときは新規学習してください'),
         'learning_rate': ('学習率', 0.0001, None, '固定の最適値ではありません。データセットに応じて調整'),
         'optimizer_type': ('Optimizer', 'AdamW', ['AdamW', 'AdamW8bit', 'CAME', 'Adafactor'], '両エンジンの初期値はAdamW。CAMEは「かんたん導入」で必要パッケージを追加。Adafactorはsd-scripts専用'),
         'weight_decay': ('Weight decay', '', None, '空欄は各Optimizerの既定値。記事のキャラクターレシピは0.00005'),
@@ -158,12 +158,13 @@ def apply_preset(settings, preset):
 
 def apply_character_lokr_preset(settings):
     updates = {
-        'training': {'network_algo': 'LoKr', 'lokr_factor': 8,
+        'training': {'network_algo': 'LoKr', 'lokr_factor': 8, 'kohaku_train_target': 'attn-mlp',
+                     'network_dim': 32, 'network_alpha': 32.0, 'max_train_steps': 4000,
                      'optimizer_type': 'AdamW8bit', 'learning_rate': 0.0001,
                      'weight_decay': '0.00005', 'kohaku_ema': 0.99,
                      'gradient_accumulation_steps': 2, 'resume': '', 'network_weights': ''},
         'dataset': {'resolution': 512, 'batch_size': 2},
-        'memory': {'convrot_int8': True, 'convrot_int8_text_encoder': True},
+        'memory': {'convrot_int8': True, 'convrot_int8_text_encoder': True, 'blocks_to_swap': 0},
         'flow': {'timestep_sampling': 'shift', 'discrete_flow_shift': 3.0, 'sigmoid_scale': 1.0},
     }
     for group, values in updates.items():

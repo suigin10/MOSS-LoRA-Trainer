@@ -106,10 +106,11 @@ class AdapterChoicesTests(unittest.TestCase):
                 s = defaults()
                 s['memory']['backend'] = engine
                 s['training'].update(network_dim=24, network_alpha=12, max_train_steps=2800,
-                                     lr_scheduler='linear', resume='old/state', network_weights='old.safetensors')
+                                     lr_scheduler='linear', resume='old/state', network_weights='old.safetensors', kohaku_train_target='ffn-down')
                 s['model']['pretrained_model_name_or_path'] = 'base-int8.safetensors'
                 apply_character_lokr_preset(s)
                 self.assertEqual(s['training']['network_algo'], 'LoKr')
+                self.assertEqual(s['training']['kohaku_train_target'], 'attn-mlp')
                 self.assertEqual(s['training']['lokr_factor'], 8)
                 self.assertEqual(s['training']['optimizer_type'], 'AdamW8bit')
                 self.assertEqual(s['training']['learning_rate'], 1e-4)
@@ -118,11 +119,12 @@ class AdapterChoicesTests(unittest.TestCase):
                 self.assertEqual(s['training']['gradient_accumulation_steps'], 2)
                 self.assertEqual((s['training']['resume'], s['training']['network_weights']), ('', ''))
                 self.assertEqual((s['training']['network_dim'], s['training']['network_alpha'],
-                                  s['training']['max_train_steps'], s['training']['lr_scheduler']), (24, 12, 2800, 'linear'))
+                                  s['training']['max_train_steps'], s['training']['lr_scheduler']), (32, 32.0, 4000, 'linear'))
                 self.assertEqual((s['dataset']['resolution'], s['dataset']['batch_size']), (512, 2))
                 self.assertEqual((s['flow']['timestep_sampling'], s['flow']['discrete_flow_shift'], s['flow']['sigmoid_scale']), ('shift', 3., 1.))
                 self.assertTrue(s['memory']['convrot_int8'])
                 self.assertTrue(s['memory']['convrot_int8_text_encoder'])
+                self.assertEqual(s['memory']['blocks_to_swap'], 0)
                 self.assertEqual(s['memory']['backend'], engine)
                 self.assertEqual(s['model']['pretrained_model_name_or_path'], 'base-int8.safetensors')
                 p = {**self.p, 'settings': s}

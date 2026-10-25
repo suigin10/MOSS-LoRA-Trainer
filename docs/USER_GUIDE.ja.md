@@ -74,7 +74,7 @@ sd-scripts の環境要件を優先してください。GUI と学習用 Python 
 
 ## 初期値と変更方法
 
-新規学習は16/16・AdamW・学習率1e-4・cosine、FFN_downのみ・学習上限2500STEP・100STEPごと保存が初期値です。このGUIではOptimizerは両エンジンともAdamW、学習対象はFFN_downのみ、保存間隔は100STEPにしています。「03 学習」のKohaku学習対象でattn-mlp（Attention＋FFN）・attn（Attentionのみ）にも切り替えられます。対象変更時は新規学習を開始してください。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
+新規学習は16/16・AdamW・学習率1e-4・cosine、Attention＋FFN・学習上限2500STEP・100STEPごと保存が初期値です。このGUIではOptimizerは両エンジンともAdamW、Kohakuの学習対象はattn-mlp（Attention＋FFN）、保存間隔は100STEPにしています。「03 学習」のKohaku学習対象でffn-down（FFN_downのみ）・attn（Attentionのみ）にも切り替えられます。対象変更時は新規学習を開始してください。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
 UIの値は保存済みプロジェクトの設定です。更新だけで既存値を新しい初期値へ上書きしません。
 CAMEも選択できます。必要パッケージは「かんたん導入」で追加します。既定のSchedulerはcosineです。比較用のcosine_with_restartsも選べます。Restart周期数は初期値2（2周期・再スタート1回）で、この方式を選んだときだけ編集できます。
 Timestepの新規初期値はsigma、学習用flow shiftは1.0です。Kohakuも対応します。方式を変える場合はstateを外して新規学習してください。自然文キャプションではCaption dropoutを0にすることを推奨します。
@@ -165,6 +165,10 @@ sd-scriptsで「再開指定を解除」後に「初期 LoRA 重み」を指定�
 「実行・ログ」タブの「学習終了時に通知音」で通知音を切り替えられます。初期値はONで、学習の正常終了・失敗時に通知し、手動停止や環境導入時は鳴らしません。Windowsでは同梱の `assets/pokopin.wav`（約0.9秒の、柔らかい「ポ・コ・ピン♪」という3音）を使います。「音を試す」で確認できます。通知音のON/OFFはこのPC共通の設定として `data/ui_preferences.json` に保存します。再生音量はOS側の音量設定に従います。
 
 実行ごとに `data/projects/<ID>/runs/<実行ID>/` を作成します。
+
+- 上部の「プロジェクトフォルダ」は、このプロジェクトの設定と全学習履歴を含む `data/projects/<ID>/` を開きます。
+- 「実行・ログ」の「最新の学習フォルダ」は、最新1回分のモデル・ログ・実行時設定を含む `runs/<実行ID>/` を開きます。
+
 
 ```text
 train.toml / dataset.toml      学習時に使った設定
@@ -277,6 +281,6 @@ KohakuMossTrainerは **KohakuMoss License 1.0** です。Apache-2.0に第10条�
 
 「03 学習」でLoRA / LoKr / LoHaを選択できます（両エンジン対応、初期値LoRA）。LoKr factorはLoKr選択時だけ、Polynomial powerはpolynomial選択時だけ編集できます。方式・factor・Schedulerの変更時はstateを外し、新規学習してください。詳しくは[設定ガイド](STABLE_SETTINGS.md#lora--lokr--loha)を参照してください。
 
-「03 学習」の「キャラクターLoKr（実験的）」から、LoKr factor 8・AdamW8bit・学習率0.0001・Weight decay 0.00005・shift・解像度512・batch 2・勾配累積2・Kohaku EMA 0.99・ConvRot INT8を一括設定できます。適用すると再開stateと初期重みの指定を解除します。
+「03 学習」の「キャラクターLoKr（実験的）」から、attn-mlp（Attention＋FFN）・4000STEP・Rank / Alpha 32 / 32・Swap 0・LoKr factor 8・AdamW8bit・学習率0.0001・Weight decay 0.00005・shift・解像度512・batch 2・勾配累積2・Kohaku EMA 0.99・ConvRot INT8を一括設定できます。適用すると再開stateと初期重みの指定を解除します。
 
 キャラクターLoKrの機能・設定値は実験的です。

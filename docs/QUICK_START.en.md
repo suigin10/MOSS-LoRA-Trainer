@@ -16,11 +16,11 @@ To update, close the app and copy the new application files into its folder. Kee
 
 ## New-project defaults
 
-Kohaku starts with FFN_down only, rank/alpha 16/16, AdamW, LR 1e-4, cosine, 100 warmup steps, a 10% LR floor, **2500 steps and saves every 100 steps**. Caption dropout starts at 0.1; **0 is recommended for natural-language captions**. Timestep sampling defaults to sigma with flow shift 1.0, logit mean -1.09 and logit std 0.95. The 12GB starting memory plan uses INT8 model files, ckpt-resident, batch 1 and 6144 joint image/text tokens. Compilation and training samples start OFF.
+Kohaku starts with attn-mlp (Attention + FFN), rank/alpha 16/16, AdamW, LR 1e-4, cosine, 100 warmup steps, a 10% LR floor, **2500 steps and saves every 100 steps**. Caption dropout starts at 0.1; **0 is recommended for natural-language captions**. Timestep sampling defaults to sigma with flow shift 1.0, logit mean -1.09 and logit std 0.95. The 12GB starting memory plan uses INT8 model files, ckpt-resident, batch 1 and 6144 joint image/text tokens. Compilation and training samples start OFF.
 
 The new-project step count, save interval, optimizer and scheduler also apply when switching to sd-scripts. Apply the sd-scripts rank, LR and other starting values from the [settings guide](STABLE_SETTINGS.md) manually. Switching engines and updating the app do not reset saved values.
 
-- **Training target:** Kohaku offers `ffn-down`, `attn-mlp` (Attention + FFN, the previous behavior) and `attn`. Projects saved before this selector existed retain `attn-mlp`. For sd-scripts, the guide describes the include/exclude patterns for FFN_down only.
+- **Training target:** Kohaku offers `ffn-down`, `attn-mlp` (Attention + FFN, default) and `attn`. Projects saved before this selector existed retain `attn-mlp`. For sd-scripts, the guide describes the include/exclude patterns for FFN_down only.
 - **Optimizer:** AdamW is the default for both engines. AdamW8bit and CAME are optional. Adafactor is sd-scripts only. Choosing CAME does not reset LR or scheduler.
 - **Scheduler:** cosine remains the default. Optional `cosine_with_restarts` starts at 2 cycles, meaning one restart. The cycle field is editable only for that scheduler. Warmup runs once at the start. Kohaku applies its LR floor to each cycle; sd-scripts decays toward zero.
 - **Timestep:** Kohaku maps shift to its logit-normal sampler with mu=0 and the selected sigmoid scale and shift. The previous MOSS sampler remains available through sigma. Keep Kohaku's weighting scheme at logit_normal. Training flow shift is separate from sample-generation flow shift.
@@ -79,4 +79,6 @@ Schedulers: constant, constant_with_warmup, cosine (default), cosine_with_restar
 
 Kohaku exports both ComfyUI and LyCORIS formats; the inference application must support the selected type. With LoHa/LoKr and Attention targets, fused QKV exports may include dense differences and be larger.
 
-The Character LoKr feature and settings are experimental. Click **Character LoKr (experimental)** in **03 Training** to apply LoKr factor 8, AdamW8bit, LR 0.0001, weight decay 0.00005, shift timesteps (flow shift 3.0, sigmoid scale 1.0), resolution 512, batch 2, accumulation 2, Kohaku EMA 0.99 and ConvRot INT8 for DiT/Qwen. Select MOSS Image Base and Qwen ConvRot INT8 files in **01 Model**. Applying the preset clears resume-state and initial-weight paths. Review and save the settings. Kohaku writes separate `-ema0.99-comfy` and `-ema0.99-lycoris` exports and saves EMA state.
+The Character LoKr feature and settings are experimental. Click **Character LoKr (experimental)** in **03 Training** to apply the attn-mlp target, 4000 steps, rank/alpha 32/32, block swap 0, LoKr factor 8, AdamW8bit, LR 0.0001, weight decay 0.00005, shift timesteps (flow shift 3.0, sigmoid scale 1.0), resolution 512, batch 2, accumulation 2, Kohaku EMA 0.99 and ConvRot INT8 for DiT/Qwen. Select MOSS Image Base and Qwen ConvRot INT8 files in **01 Model**. Applying the preset clears resume-state and initial-weight paths. Review and save the settings. Kohaku writes separate `-ema0.99-comfy` and `-ema0.99-lycoris` exports and saves EMA state.
+
+**Project folder** opens the project settings and all training runs. **Latest training folder** in Run / Logs opens the models, logs and settings for the latest single run.

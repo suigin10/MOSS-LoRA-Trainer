@@ -12,7 +12,7 @@
 | Scheduler | cosine | cosine |
 | Warmup | 100 steps | 100 steps |
 | 最小学習率の比率 / Minimum LR ratio | 0.1（初期学習率の10%） | 対象外 |
-| 学習対象 / Training target | ffn-down（FFN_downのみ） | 標準（または下記のFFN_down指定） |
+| 学習対象 / Training target | attn-mlp（Attention＋FFN） | 標準（または下記のFFN_down指定） |
 | 最大STEP / Total steps | 2500 | 2500 |
 | 保存間隔 / Save interval | 100 steps | 100 steps |
 | Caption dropout | 0.1（自然文は0推奨） | 0.05（自然文は0推奨） |
@@ -70,6 +70,10 @@ Kohakuの出力は従来どおりComfyUI形式・LyCORIS形式の2種類です�
 | 項目 | 設定 |
 | --- | --- |
 | 学習方式 / LoKr factor | LoKr / 8 |
+| Kohaku学習対象 | attn-mlp（Attention＋FFN） |
+| Rank / Alpha | 32 / 32 |
+| 最大STEP | 4000 |
+| CPUにスワップするブロック数 | 0 |
 | Optimizer / 学習率 | AdamW8bit / 0.0001 |
 | Weight decay | 0.00005 |
 | Timestep sampling / 学習用flow shift / Sigmoid scale | shift / 3.0 / 1.0 |
@@ -82,7 +86,7 @@ Kohakuの出力は従来どおりComfyUI形式・LyCORIS形式の2種類です�
 
 ## 学習対象
 
-「03 学習」のKohaku学習対象は、ffn-down（FFN_downのみ、初期値）、attn-mlp（Attention＋FFN、従来設定）、attn（Attentionのみ）から選べます。ffn-downは全ブロックのFFN_downだけを学習します。画風LoRAの比較用に使えますが、効果はデータセットによって異なります。対象を変える場合は再開stateを外し、新規学習してください。対象欄のなかった既存プロジェクトは従来のattn-mlpを引き継ぎます。
+「03 学習」のKohaku学習対象は、attn-mlp（Attention＋FFN、初期値）、ffn-down（FFN_downのみ）、attn（Attentionのみ）から選べます。ffn-downは全ブロックのFFN_downだけを学習します。画風LoRAの比較用に使えますが、効果はデータセットによって異なります。対象を変える場合は再開stateを外し、新規学習してください。対象欄のなかった既存プロジェクトは従来のattn-mlpを引き継ぎます。
 
 sd-scriptsでもFFN_downのみを試す場合は「05 Flow・LoRA 詳細」で以下を入力します（Kohakuの対象欄は適用されません）。
 

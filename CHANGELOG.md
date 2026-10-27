@@ -1,6 +1,6 @@
 # 変更履歴
 
-## 未リリース — 2026-10-27
+## 0.2.4 — 2026-10-27
 
 - 新規Kohakuの既定値をRank / Alpha 8 / 4、AdamW8bit、LR 0.0002、Weight decay 0.0001、512px、Caption dropout 0、EMA 0.99へ変更。cosine・warmup 100・下限10%・100STEP保存を維持し、学習上限は余裕を持たせた4000STEP。既存プロジェクトの保存値は保持。
 - 新規作成画面に学習エンジン選択を追加。sd-scriptsは公式MOSSガイドの設定例（Rank / Alpha 16 / 1、LR 0.0001、constant、10エポック、truncated_logit_normal）に準拠。旧プロジェクトの不足項目は従来値で補完。

@@ -3,7 +3,7 @@
 **MOSS-ImageのLoRAを作成する、Windows向け学習GUI。**
 Kohaku / sd-scriptsの導入から、データセット設定・学習・追加学習・LoRA出力まで操作できます。
 
-[公開済みリリース v0.2.3](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
+[最新版 v0.2.4 をダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
 
 <img src="docs/images/amber-ui.png" alt="琥珀色UIの学習設定画面" width="800">
 
@@ -13,7 +13,7 @@ Kohaku / sd-scriptsの導入から、データセット設定・学習・追加�
 Kohakuには対応するNVIDIAドライバとVisual Studio Build ToolsのC++ワークロードも必要です。
 モデルの入手先と12GB向け設定は[設定ガイド](docs/STABLE_SETTINGS.md)を参照してください。
 
-1. [最新ソースZIP](https://github.com/suigin10/MOSS-LoRA-Trainer/archive/refs/heads/main.zip)を展開し、`Start MOSS LoRA Trainer.bat` を起動します。
+1. [最新版の配布ZIP](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest)を展開し、`Start MOSS LoRA Trainer.bat` を起動します。
 2. 右上の「かんたん導入」で学習エンジンと専用環境を作成します。
 3. 「01 モデル」でモデル、「02 データセット」で教師画像を指定します。
 4. 学習設定を確認し、「学習前チェック」→「学習を開始」を押します。
@@ -28,9 +28,9 @@ GUIはPython標準のtkinterで動作します。学習用パッケージとTrit
 - **学習方式：** LoRA / LoKr / LoHaを選択可能。cosine・再スタート付きcosine・polynomialなどのSchedulerに対応します。
 - **LoRA出力：** KohakuはComfyUI形式・LyCORIS形式で保存。GUIの表示言語は日本語／英語を切り替えられます。
 
-## mainブランチの更新内容（2026-10-27）
+## v0.2.4の更新内容（2026-10-27）
 
-[最新ソースZIPをダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/archive/refs/heads/main.zip)。公開済みリリースv0.2.3には以下の変更は含まれません。更新時はアプリを閉じ、`data/`と`backend/`を保持してアプリ本体を置き換えてください。
+[配布ZIPとSHA-256](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/tag/v0.2.4)から取得できます。更新時はアプリを閉じ、`data/`と`backend/`を保持してアプリ本体を置き換えてください。
 
 - 新規作成画面で学習エンジンを選択。KohakuはRank / Alpha 8 / 4、AdamW8bit、LR 0.0002、cosine、512px、EMA 0.99、上限4000STEP・100STEP保存。途中保存を比較して採用STEPを選べます。
 - sd-scriptsは公式MOSSガイドの設定例（Rank / Alpha 16 / 1、LR 0.0001、constant、10エポック、truncated_logit_normal）に準拠。

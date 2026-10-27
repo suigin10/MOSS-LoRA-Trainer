@@ -1,4 +1,4 @@
-# MOSS LoRA Trainer with Kohaku — current main branch
+# MOSS LoRA Trainer with Kohaku v0.2.4
 
 The app reopens the last selected project on startup. If it no longer exists, a new project is created with default settings.
 
@@ -6,7 +6,7 @@ Windows GUI for MOSS-Image LoRA training with Kohaku and sd-scripts. New project
 
 ## Install and update
 
-1. Extract the [latest source ZIP](https://github.com/suigin10/MOSS-LoRA-Trainer/archive/refs/heads/main.zip) (the published v0.2.3 release predates these changes) and run **Start MOSS LoRA Trainer.bat** with 64-bit Python 3.12. Choose **English** in the header.
+1. Extract the [latest release ZIP](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) and run **Start MOSS LoRA Trainer.bat** with 64-bit Python 3.12. Choose **English** in the header.
 2. Use **Easy setup** to create or repair a dedicated backend: sd-scripts uses cu128 / PyTorch 2.8 or cu124 / 2.6; Kohaku uses cu130 / 2.13. Kohaku also needs a compatible NVIDIA driver and Visual Studio C++ Build Tools.
 3. Select the engine in **04 VRAM / Speed**. Setup preserves unrelated Python environments. Triton is paired with PyTorch and verified with a small GPU kernel.
 4. In **01 Model**, select the MOSS-Image DiT, Qwen3.5-9B encoder and FLUX.2 VAE. For sharded models, select the first shard. W4A8 GPTQ Qwen is unsupported. See the [settings guide](STABLE_SETTINGS.md) for download links.

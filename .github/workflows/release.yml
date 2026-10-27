@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: ['moss_trainer/__init__.py']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
+
+  publish:
+    needs: tests
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read and validate version
+        run: |
+          python - <<'PY'
+          import os, re
+          from moss_trainer import __version__
+          if not re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+", __version__):
+              raise SystemExit("Invalid release version")
+          with open(os.environ["GITHUB_ENV"], "a") as out:
+              out.write(f"TAG=v{__version__}\n")
+          PY
+      - name: Package tracked application files and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving its assets unchanged."
+            exit 0
+          fi
+          notes="docs/releases/$TAG.md"
+          test -f "$notes"
+          archive="MOSS-LoRA-Trainer-with-Kohaku-$TAG.zip"
+          git archive --format=zip --prefix="MOSS-LoRA-Trainer-with-Kohaku-$TAG/" --output="$archive" HEAD
+          sha256sum "$archive" > "$archive.sha256"
+          gh release create "$TAG" "$archive" "$archive.sha256" \
+            --target "$GITHUB_SHA" --title "MOSS LoRA Trainer with Kohaku $TAG" \
+            --notes-file "$notes" --latest

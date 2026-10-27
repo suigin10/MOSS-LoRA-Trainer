@@ -2,6 +2,7 @@ import ast
 import copy
 import json
 import os
+import re
 from pathlib import Path
 import runpy
 import subprocess
@@ -27,7 +28,7 @@ class KohakuTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.store = ProjectStore(self.root / 'projects')
         self.p = self.store.create('Kohaku')
-        self.p['settings'] = defaults('sd-scripts')
+        self.p['settings'] = defaults('sd-scripts', legacy=True)
         self.p['settings']['memory']['backend'] = 'kohaku'
         images = self.root / '画像 with spaces'
         images.mkdir()
@@ -40,13 +41,15 @@ class KohakuTests(unittest.TestCase):
     def test_kohaku_defaults_and_cosine_floor_are_exported(self):
         fresh = self.store.create('official')
         values = knobs(fresh, self.root)
-        self.assertEqual((values['DIM'], values['ALPHA']), (16, 16.0))
-        self.assertEqual(values['OPTIMIZER'], 'adamw')
-        self.assertEqual(values['MEMORY_OVERRIDES'], {})
-        self.assertEqual(values['LR'], 1e-4)
+        self.assertEqual((values['DIM'], values['ALPHA']), (8, 4.0))
+        self.assertEqual(values['OPTIMIZER'], 'adamw8bit')
+        self.assertEqual(values['MEMORY_OVERRIDES'], {'optim_state': 'gpu', 'fused_step': False})
+        self.assertEqual(values['LR'], 2e-4)
         self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
-        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (2500, 100, 0.1))
-        self.assertEqual(values['PRESET'], 'attn-mlp')
+        self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (4000, 100, 0.0))
+        self.assertEqual((values['WEIGHT_DECAY'], values['EMA'], values['TARGET_AREA']), (1e-4, 0.99, 512 ** 2))
+        self.assertFalse(any(re.match(p, 'layers.22.proj.q') for p in values['PRESET']['target_name']))
+        self.assertTrue(any(re.match(p, 'layers.21.proj.q') for p in values['PRESET']['target_name']))
         self.assertEqual(values['TIMESTEP'], 'moss')
         self.assertEqual(values['TIMESTEP_KWARGS'], {'mu': -1.09, 's': 0.95, 'shift': 1.0, 'cutoff': 0.95, 'uniform_mix': 0.01})
         self.assertNotIn('kohaku_lr_min_ratio', training_config(fresh, self.root))
@@ -137,6 +140,51 @@ class KohakuTests(unittest.TestCase):
         self.assertTrue(validate(self.p))
         with self.assertRaises(ValueError):
             knobs(self.p, self.root)
+
+    def test_pattern_filters_export_with_fullmatch_and_include_precedence(self):
+        flow = self.p['settings']['flow']
+        flow.update(exclude_patterns='layers[.]22[.].*\n\n layers[.]21[.]proj[.]q ',
+                    include_patterns='layers[.]22[.]proj[.]k')
+        self.assertEqual(validate(self.p), [])
+        run = self.root / 'patterns'
+        write_run(self.p, self.env, run)
+        preset = runpy.run_path(str(run / 'kohaku_train.py'))['PRESET']
+        matches = lambda name: any(re.match(p, name) for p in preset['target_name'])
+        self.assertFalse(preset['use_fnmatch'])
+        for name, expected in [('layers.22.proj.q', False), ('layers.22.proj.k', True),
+                               ('layers.22.proj.ffn_down', False), ('layers.21.proj.q', False),
+                               ('layers.21.proj.k', True), ('layers.23.proj.ffn_down', True),
+                               ('layers.22.proj', False), ('text_embedder.proj', False)]:
+            with self.subTest(name=name):
+                self.assertEqual(bool(matches(name)), expected)
+        self.assertIn("exclude_patterns=", ' '.join(training_config(self.p, run)['network_args']))
+        original = copy.deepcopy(self.p)
+        flow['exclude_patterns'] = 'layers[.]21[.].*'
+        from moss_trainer.core import resume_differences
+        self.assertTrue(resume_differences(self.p, {'backend': 'kohaku', 'snapshot': original}))
+
+    def test_pattern_filters_preserve_targets_and_regex_flags(self):
+        from moss_trainer.kohaku_backend import training_preset
+        training, flow = self.p['settings']['training'], self.p['settings']['flow']
+        for target in ('attn', 'attn-mlp', 'ffn-down'):
+            training['kohaku_train_target'] = target
+            for exclusion in ('layers[.]22[.].*', '(?i)LAYERS[.]22[.].*',
+                              '(?x) layers [.] 22 [.] .* # block 22'):
+                flow.update(exclude_patterns=exclusion, include_patterns='layers[.]22[.]proj[.]k')
+                patterns = training_preset(training, flow)['target_name']
+                matches = lambda name: any(re.match(p, name) for p in patterns)
+                self.assertFalse(matches('layers.22.proj.q'))
+                self.assertEqual(bool(matches('layers.22.proj.k')), target != 'ffn-down')
+                self.assertEqual(bool(matches('layers.21.proj.ffn_down')), target != 'attn')
+                self.assertFalse(matches('layers.22.proj.q.extra'))
+        flow.update(exclude_patterns='layers[.]22', include_patterns='')
+        self.assertTrue(any(re.match(p, 'layers.22.proj.ffn_down')
+                            for p in training_preset(training, flow)['target_name']))
+        flow.update(exclude_patterns='', include_patterns='.*')
+        training['kohaku_train_target'] = 'attn'
+        self.assertEqual(training_preset(training, flow), 'attn')
+        flow['exclude_patterns'] = '['
+        self.assertTrue(validate(self.p))
 
     def test_old_projects_keep_full_target_and_resume_requires_same_target(self):
         from moss_trainer.core import resume_differences

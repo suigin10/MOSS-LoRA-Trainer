@@ -42,18 +42,22 @@ class GuiTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = App(Path(self.temp.name) / 'data')
         # These regression cases exercise the existing sd-scripts workflow.
-        self.app.project['settings'] = defaults('sd-scripts')
+        self.app.project['settings'] = defaults('sd-scripts', legacy=True)
         self.app.load_project(self.app.project)
         self.app.save()
         self.addCleanup(self.app.destroy)
         self.app.update()
 
-    def test_new_project_defaults_are_16_sigma_2500_without_changing_old_projects(self):
+    def test_new_project_defaults_match_kohaku_recipe_without_changing_old_projects(self):
         fresh = self.app.store.create('New defaults')
         self.app.load_project(fresh)
         current = self.app.collect()['settings']
-        self.assertEqual((current['training']['network_dim'], current['training']['network_alpha']), (16, 16))
-        self.assertEqual(current['training']['max_train_steps'], 2500)
+        self.assertEqual((current['training']['network_dim'], current['training']['network_alpha']), (8, 4))
+        self.assertEqual(current['training']['max_train_steps'], 4000)
+        self.assertEqual((current['training']['optimizer_type'], current['training']['learning_rate']), ('AdamW8bit', 0.0002))
+        self.assertEqual((current['training']['weight_decay'], current['training']['kohaku_ema']), ('0.0001', 0.99))
+        self.assertEqual((current['dataset']['resolution'], current['dataset']['caption_dropout_rate']), (512, 0.0))
+        self.assertEqual(current['flow']['exclude_patterns'], 'layers[.]22[.].*')
         self.assertEqual(current['training']['kohaku_train_target'], 'attn-mlp')
         self.assertEqual(current['training']['save_every_n_steps'], 100)
         self.assertEqual((current['flow']['timestep_sampling'], current['flow']['discrete_flow_shift']), ('sigma', 1.0))
@@ -64,29 +68,36 @@ class GuiTests(unittest.TestCase):
         self.app.load_project(old)
         self.assertEqual(self.app.collect()['settings'], fresh['settings'])
 
-    def test_character_lokr_button_applies_and_persists_recipe_without_changing_defaults(self):
-        original_defaults = defaults()
-        self.app.variables[('model', 'vae')].set('C:/existing-vae.safetensors')
-        self.app.variables[('training', 'max_train_steps')].set('2500')
-        self.app.variables[('training', 'resume')].set('old/state')
-        self.app.variables[('memory', 'backend')].set('kohaku')
-        self.app.character_lokr_button.invoke()
-        self.app.update()
-        self.assertEqual(self.app.character_lokr_button.cget('text'), 'キャラクターLoKr（実験的）')
-        current = self.app.collect()
-        t = current['settings']['training']
-        self.assertEqual((t['network_algo'], t['lokr_factor'], t['kohaku_ema']), ('LoKr', 8, .99))
-        self.assertEqual((t['max_train_steps'], t['resume']), (4000, ''))
-        self.assertEqual((t['network_dim'], t['network_alpha']), (32, 32.0))
-        self.assertEqual(t['kohaku_train_target'], 'attn-mlp')
-        self.assertEqual(current['settings']['memory']['blocks_to_swap'], 0)
-        self.assertEqual(current['settings']['dataset']['resolution'], 512)
-        self.assertEqual(current['settings']['model']['vae'], 'C:/existing-vae.safetensors')
-        self.assertEqual(self.app.project['settings']['training']['network_algo'], 'LoRA')
-        self.assertTrue(self.app.save())
-        loaded = self.app.store.load(self.app.store.directory(self.app.project) / 'project.json')
-        self.assertEqual(loaded['settings'], current['settings'])
-        self.assertEqual(defaults(), original_defaults)
+    def test_removed_recipe_and_capacity_buttons_are_absent(self):
+        self.assertFalse(hasattr(self.app, 'character_lokr_button'))
+        def texts(widget):
+            result = []
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Button):
+                    result.append(child.cget('text'))
+                result.extend(texts(child))
+            return result
+        labels = texts(self.app)
+        self.assertFalse(set(labels) & {'12GB', '16GB', '24GB+', 'キャラクターLoKr（実験的）'})
+        self.assertIn('設定ガイド', labels)
+
+    def test_new_sd_scripts_project_uses_official_example(self):
+        dialog = ProjectDialog(self.app)
+        dialog.name.set('Official sd-scripts')
+        dialog.backend.set('sd-scripts')
+        dialog.create()
+        settings = self.app.collect()['settings']
+        self.assertEqual(settings['memory']['backend'], 'sd-scripts')
+        self.assertEqual((settings['training']['network_dim'], settings['training']['network_alpha']), (16, 1.0))
+        self.assertEqual((settings['training']['max_train_steps'], settings['training']['max_train_epochs']), (0, 10))
+        self.assertEqual(settings['flow']['timestep_sampling'], 'truncated_logit_normal')
+        self.assertEqual(settings['flow']['exclude_patterns'], '')
+        self.assertEqual(settings['training']['lr_scheduler'], 'constant')
+        self.assertEqual(self.app.stop_mode.get(), 'epochs')
+        from moss_trainer.core import training_config
+        config = training_config(self.app.collect(), Path(self.temp.name))
+        self.assertEqual(config['timestep_sampling'], 'truncated_logit_normal')
+        self.assertEqual(config['max_train_epochs'], 10)
 
     def test_adapter_and_polynomial_controls_preserve_settings(self):
         factor = self.app.field_widgets[('training', 'lokr_factor')]
@@ -176,12 +187,10 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(json.loads((folder / 'project_snapshot.json').read_text(encoding='utf-8'))['settings']['memory']['backend'], 'kohaku')
         self.assertIn('Kohaku', show.call_args.args[1])
 
-    def test_startup_and_preset_controls(self):
+    def test_startup_memory_controls_remain_editable(self):
         self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
-        self.app.set_preset('24GB+')
+        self.app.variables[('memory', 'convrot_int8')].set(False)
         self.assertFalse(self.app.collect()['settings']['memory']['convrot_int8'])
-        self.app.set_preset('12GB')
-        self.assertTrue(self.app.collect()['settings']['memory']['convrot_int8'])
 
     def test_cpu_threads_are_editable_and_in_command_preview(self):
         variable = self.app.variables[('memory', 'num_cpu_threads_per_process')]
@@ -191,7 +200,6 @@ class GuiTests(unittest.TestCase):
             self.app.preview()
         self.assertIn('--num_cpu_threads_per_process 4', show.call_args.args[1])
         self.assertNotIn('num_cpu_threads_per_process =', show.call_args.args[1])
-        self.app.set_preset('12GB')
         self.assertEqual(self.app.collect()['settings']['memory']['num_cpu_threads_per_process'], 4)
 
     def test_short_model_page_stays_at_top_after_wheel_and_resize(self):
@@ -344,7 +352,7 @@ class GuiTests(unittest.TestCase):
         dialog = ProjectDialog(self.app)
         dialog.name.set('デフォルト新規')
         dialog.create()
-        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 16)
+        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 8)
         self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
 
     def test_project_and_latest_training_folder_buttons_open_distinct_locations(self):
@@ -381,7 +389,7 @@ class GuiTests(unittest.TestCase):
         project = self.app.collect()
         self.assertEqual(project['settings']['model']['vae'], 'D:/models/vae.safetensors')
         self.assertEqual(project['settings']['model']['text_encoder'], 'D:/models/qwen.safetensors')
-        self.assertEqual(project['settings']['training']['learning_rate'], 0.0001)
+        self.assertEqual(project['settings']['training']['learning_rate'], 0.0002)
         self.assertEqual(project['subsets'][0]['image_dir'], '')
 
     def test_delete_last_project_and_add_again_with_models_retained(self):

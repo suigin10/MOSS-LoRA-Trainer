@@ -1,4 +1,4 @@
-# MOSS LoRA Trainer with Kohaku v0.2.3
+# MOSS LoRA Trainer with Kohaku — current main branch
 
 The app reopens the last selected project on startup. If it no longer exists, a new project is created with default settings.
 
@@ -6,7 +6,7 @@ Windows GUI for MOSS-Image LoRA training with Kohaku and sd-scripts. New project
 
 ## Install and update
 
-1. Extract the release ZIP and run **Start MOSS LoRA Trainer.bat** with 64-bit Python 3.12. Choose **English** in the header.
+1. Extract the [latest source ZIP](https://github.com/suigin10/MOSS-LoRA-Trainer/archive/refs/heads/main.zip) (the published v0.2.3 release predates these changes) and run **Start MOSS LoRA Trainer.bat** with 64-bit Python 3.12. Choose **English** in the header.
 2. Use **Easy setup** to create or repair a dedicated backend: sd-scripts uses cu128 / PyTorch 2.8 or cu124 / 2.6; Kohaku uses cu130 / 2.13. Kohaku also needs a compatible NVIDIA driver and Visual Studio C++ Build Tools.
 3. Select the engine in **04 VRAM / Speed**. Setup preserves unrelated Python environments. Triton is paired with PyTorch and verified with a small GPU kernel.
 4. In **01 Model**, select the MOSS-Image DiT, Qwen3.5-9B encoder and FLUX.2 VAE. For sharded models, select the first shard. W4A8 GPTQ Qwen is unsupported. See the [settings guide](STABLE_SETTINGS.md) for download links.
@@ -16,14 +16,14 @@ To update, close the app and copy the new application files into its folder. Kee
 
 ## New-project defaults
 
-Kohaku starts with attn-mlp (Attention + FFN), rank/alpha 16/16, AdamW, LR 1e-4, cosine, 100 warmup steps, a 10% LR floor, **2500 steps and saves every 100 steps**. Caption dropout starts at 0.1; **0 is recommended for natural-language captions**. Timestep sampling defaults to sigma with flow shift 1.0, logit mean -1.09 and logit std 0.95. The 12GB starting memory plan uses INT8 model files, ckpt-resident, batch 1 and 6144 joint image/text tokens. Compilation and training samples start OFF.
+Choose the engine in **Add / Copy** when creating a fresh project. Kohaku is preselected; copies retain their source settings.
 
-The new-project step count, save interval, optimizer and scheduler also apply when switching to sd-scripts. Apply the sd-scripts rank, LR and other starting values from the [settings guide](STABLE_SETTINGS.md) manually. Switching engines and updating the app do not reset saved values.
+- **Kohaku:** LoRA, attn-mlp, rank/alpha 8/4, AdamW8bit, LR 0.0002, weight decay 0.0001, cosine with 100 warmup steps and a 10% LR floor, **4000-step limit, saving every 100 steps**. Resolution 512, batch 1, caption dropout 0, EMA 0.99, sigma sampling, flow shift 1.0, logit mean -1.09 and std 0.95. Block 22 is excluded from training by default. The limit leaves room to compare intermediate checkpoints; the final checkpoint need not be the best.
+- **sd-scripts:** follows the bundled official MOSS guide example: rank/alpha 16/1, AdamW8bit, LR 0.0001, constant LR, 10 epochs, saving each epoch, resolution 1024, truncated_logit_normal sampling with mean -1.09, std 0.95 and shift 1.0. No default training exclusion or EMA. These are starting values, not a universal optimum.
+- **Target filtering:** both engines accept one full-match regular expression per line. Includes override exclusions within the selected target. For example, `layers[.]22[.].*` excludes block 22. This is separate from unconditional skip layers used for sample generation.
+- **Memory:** adjust quantization, swapping and batch fields directly. Capacity presets and the Character LoKr button have been removed. The settings guide remains available. Training samples and compilation start OFF.
 
-- **Training target:** Kohaku offers `ffn-down`, `attn-mlp` (Attention + FFN, default) and `attn`. Projects saved before this selector existed retain `attn-mlp`. For sd-scripts, the guide describes the include/exclude patterns for FFN_down only.
-- **Optimizer:** AdamW is the default for both engines. AdamW8bit and CAME are optional. Adafactor is sd-scripts only. Choosing CAME does not reset LR or scheduler.
-- **Scheduler:** cosine remains the default. Optional `cosine_with_restarts` starts at 2 cycles, meaning one restart. The cycle field is editable only for that scheduler. Warmup runs once at the start. Kohaku applies its LR floor to each cycle; sd-scripts decays toward zero.
-- **Timestep:** Kohaku maps shift to its logit-normal sampler with mu=0 and the selected sigmoid scale and shift. The previous MOSS sampler remains available through sigma. Keep Kohaku's weighting scheme at logit_normal. Training flow shift is separate from sample-generation flow shift.
+Switching an existing project's engine preserves its values. Updating the app does not overwrite saved projects.
 
 Start a new run when changing target, optimizer, scheduler, cycle count or timestep settings. Saved projects retain their original values, including older cosine LR floors of 0.
 
@@ -75,10 +75,10 @@ The pinned PyTorch is preserved. Installation checks bf16 GPU forward and backwa
 
 In **03 Training**, choose **LoRA**, **LoKr**, or **LoHa** with either engine. LoRA remains the default. LoKr factor defaults to -1 (automatic); positive integers such as 8 select a factor. Equal rank does not imply equal parameter count across types. Clear the resume state before changing type or factor. Older sd-scripts checkouts without MOSS LoHa/LoKr support require a new environment in another folder using Easy setup.
 
-Schedulers: constant, constant_with_warmup, cosine (default), cosine_with_restarts, linear, and polynomial. Polynomial power defaults to 1 (linear decay); larger values decay faster initially. Polynomial ends at zero in both engines. Power is ignored for other schedulers. Keep scheduler settings unchanged when resuming state.
+Schedulers: constant (sd-scripts default), constant_with_warmup, cosine (Kohaku default), cosine_with_restarts, linear, and polynomial. Polynomial power defaults to 1 (linear decay); larger values decay faster initially. Polynomial ends at zero in both engines. Power is ignored for other schedulers. Keep scheduler settings unchanged when resuming state.
 
 Kohaku exports both ComfyUI and LyCORIS formats; the inference application must support the selected type. With LoHa/LoKr and Attention targets, fused QKV exports may include dense differences and be larger.
 
-The Character LoKr feature and settings are experimental. Click **Character LoKr (experimental)** in **03 Training** to apply the attn-mlp target, 4000 steps, rank/alpha 32/32, block swap 0, LoKr factor 8, AdamW8bit, LR 0.0001, weight decay 0.00005, shift timesteps (flow shift 3.0, sigmoid scale 1.0), resolution 512, batch 2, accumulation 2, Kohaku EMA 0.99 and ConvRot INT8 for DiT/Qwen. Select MOSS Image Base and Qwen ConvRot INT8 files in **01 Model**. Applying the preset clears resume-state and initial-weight paths. Review and save the settings. Kohaku writes separate `-ema0.99-comfy` and `-ema0.99-lycoris` exports and saves EMA state.
+Kohaku EMA defaults to 0.99 and writes separate `-ema0.99-comfy` and `-ema0.99-lycoris` exports while retaining normal exports. EMA state is saved for resuming. LoKr and LoHa remain available through the adapter-type selector.
 
 **Project folder** opens the project settings and all training runs. **Latest training folder** in Run / Logs opens the models, logs and settings for the latest single run.

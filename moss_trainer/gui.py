@@ -19,7 +19,7 @@ from uuid import uuid4
 
 from .backends import backend, selected_environment, source_dir, environment_valid
 from .icons import load as load_icons, decorate as decorate_icons
-from .core import (FIELDS, ENV_DEFAULTS, ProjectStore, Runner, apply_preset, apply_character_lokr_preset, atomic_json,
+from .core import (FIELDS, ENV_DEFAULTS, ProjectStore, Runner, atomic_json,
                    command, dataset_config, dataset_report, defaults, dump_toml, probe,
                    probe_errors, sample_prompts_text, state_info, discover_states,
                    resume_differences, training_config, validate, write_run)
@@ -80,13 +80,17 @@ class ProjectDialog(tk.Toplevel):
         entry = ttk.Entry(body, textvariable=self.name)
         entry.grid(row=1, column=1, sticky='ew', pady=6)
         self.mode = tk.StringVar(value='defaults')
-        ttk.Radiobutton(body, text=tr('推奨デフォルト値から作成（VRAM 12GB 向け）'), variable=self.mode, value='defaults', command=self.toggle).grid(row=2, column=0, columnspan=2, sticky='w', pady=(15, 6))
+        ttk.Radiobutton(body, text=tr('選択した学習エンジンのデフォルト値から作成'), variable=self.mode, value='defaults', command=self.toggle).grid(row=2, column=0, columnspan=2, sticky='w', pady=(15, 6))
         ttk.Radiobutton(body, text=tr('既存プロジェクトの設定をコピー'), variable=self.mode, value='copy', command=self.toggle).grid(row=3, column=0, columnspan=2, sticky='w', pady=6)
         self.source = ttk.Combobox(body, state='disabled', values=[p['name'] for p in app.projects])
         self.source.grid(row=4, column=0, columnspan=2, sticky='ew', pady=6)
         if app.projects:
             self.source.current(next((i for i, p in enumerate(app.projects) if p['id'] == app.project['id']), 0))
-        ttk.Label(body, text=tr('デフォルト新規でも現在のモデル設定を引き継ぎます。学習設定は初期値、画像サブセットは空欄です。コピーではデータ・学習設定も引き継ぎます。'), style='Hint.TLabel', wraplength=490).grid(row=5, column=0, columnspan=2, sticky='w', pady=8)
+        ttk.Label(body, text=tr('学習エンジン')).grid(row=5, column=0, sticky='w')
+        self.backend = tk.StringVar(value='kohaku')
+        self.backend_combo = ttk.Combobox(body, textvariable=self.backend, state='readonly', values=('kohaku', 'sd-scripts'))
+        self.backend_combo.grid(row=5, column=1, sticky='ew', pady=6)
+        ttk.Label(body, text=tr('デフォルト新規でも現在のモデル設定を引き継ぎます。学習設定は初期値、画像サブセットは空欄です。コピーではデータ・学習設定も引き継ぎます。'), style='Hint.TLabel', wraplength=490).grid(row=6, column=0, columnspan=2, sticky='w', pady=8)
         controls = ttk.Frame(self, padding=(24, 12))
         controls.grid(row=1, column=0, sticky='ew')
         ttk.Button(controls, text=tr('作成'), style='Accent.TButton', command=self.create).pack(side='right')
@@ -95,6 +99,7 @@ class ProjectDialog(tk.Toplevel):
 
     def toggle(self):
         self.source.configure(state='readonly' if self.mode.get() == 'copy' else 'disabled')
+        self.backend_combo.configure(state='disabled' if self.mode.get() == 'copy' else 'readonly')
 
     def create(self):
         try:
@@ -105,7 +110,7 @@ class ProjectDialog(tk.Toplevel):
                     raise ValueError(tr('コピー元を選択してください'))
                 source = self.app.projects[index]
             model_settings = (self.app.collect()['settings']['model'] if self.app.project else self.app.last_model_settings) if source is None else None
-            project = self.app.store.create(self.name.get(), source, model_settings=model_settings)
+            project = self.app.store.create(self.name.get(), source, model_settings=model_settings, backend_name=self.backend.get())
             self.app.refresh_projects(project['id'])
             self.destroy()
         except (OSError, ValueError) as exc:
@@ -279,7 +284,7 @@ class ResumeDialog(tk.Toplevel):
             p = self.app.collect()
             if self.restore.get() and info['snapshot']:
                 source = info['snapshot']
-                s = defaults('sd-scripts')
+                s = defaults('sd-scripts', legacy=True)
                 for group in s:
                     s[group].update(source['settings'].get(group, {}))
                 p.update(settings=s, subsets=copy.deepcopy(source['subsets']))
@@ -488,18 +493,10 @@ class App(tk.Tk):
                 ttk.Button(resumebar, text=tr('stateから再開・追加学習…'), command=self.resume_dialog).pack(side='left')
                 ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
                 ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値100 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
-                recipebar = ttk.Frame(page.body)
-                recipebar.grid(row=2, column=0, columnspan=3, sticky='ew', pady=(0, 12))
-                self.character_lokr_button = ttk.Button(recipebar, text=tr('キャラクターLoKr（実験的）'), command=self.set_character_lokr_preset)
-                self.character_lokr_button.pack(side='left')
-                ttk.Label(recipebar, text=tr('機能・設定値は実験的です。LoKr factor 8 / 512px / batch 2 × 勾配累積 2'), style='Hint.TLabel', wraplength=620).pack(side='left', padx=8)
-                row = 3
+                row = 2
             elif group == 'memory':
                 presets = ttk.Frame(page.body)
                 presets.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 12))
-                ttk.Label(presets, text=tr('VRAM 容量別プリセット')).pack(side='left', padx=(0, 10))
-                for preset in ('12GB', '16GB', '24GB+'):
-                    ttk.Button(presets, text=preset, command=lambda p=preset: self.set_preset(p)).pack(side='left', padx=4)
                 ttk.Button(presets, text=tr('設定ガイド'), command=self.show_settings_guide).pack(side='right', padx=4)
                 row = 1
             for key, spec in FIELDS[group].items():
@@ -805,22 +802,6 @@ class App(tk.Tk):
             self.status.set(tr('プロジェクトを削除済みフォルダへ移動しました: {p0}', p0=destination))
         except (ValueError, OSError) as exc:
             messagebox.showerror(tr('プロジェクトを削除できません'), str(exc), parent=self)
-
-    def set_character_lokr_preset(self):
-        settings = defaults()
-        for group, values in apply_character_lokr_preset(settings).items():
-            for key, value in values.items():
-                self.variables[(group, key)].set(value)
-        self.status.set(tr('キャラクターLoKrを適用しました（未保存）'))
-
-    def set_preset(self, name):
-        s = defaults()
-        apply_preset(s, name)
-        for key in ('convrot_int8', 'convrot_int8_text_encoder', 'blocks_to_swap', 'cpu_offload_checkpointing', 'unsloth_offload_checkpointing', 'gradient_checkpointing', 'cache_latents', 'cache_latents_to_disk', 'cache_text_encoder_outputs', 'cache_text_encoder_outputs_to_disk'):
-            self.variables[('memory', key)].set(s['memory'][key])
-        self.variables[('memory', 'kohaku_memory_profile')].set(s['memory']['kohaku_memory_profile'])
-        self.variables[('dataset', 'batch_size')].set(1)
-        self.status.set(tr('{p0} プリセットを適用しました（未保存）', p0=name))
 
     def update_summary(self):
         if self.variables[('memory', 'backend')].get() == 'kohaku':

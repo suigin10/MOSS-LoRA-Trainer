@@ -58,7 +58,7 @@ class EnglishGuiTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.data_dir = Path(self.temp.name) / 'data'
         self.app = App(self.data_dir)
-        self.app.project['settings'] = defaults('sd-scripts')
+        self.app.project['settings'] = defaults('sd-scripts', legacy=True)
         self.app.load_project(self.app.project)
         self.app.save()
         self.addCleanup(self.app.destroy)
@@ -77,12 +77,9 @@ class EnglishGuiTests(unittest.TestCase):
         self.assertTrue(self.app.project_folder_button.cget('image'))
         self.assertTrue(self.app.run_folder_button.cget('image'))
 
-    def test_character_lokr_button_is_translated_and_applies_recipe(self):
+    def test_removed_recipe_stays_absent_in_english(self):
         self.switch()
-        self.assertEqual(self.app.character_lokr_button.cget('text'), 'Character LoKr (experimental)')
-        self.app.character_lokr_button.invoke()
-        self.assertEqual(self.app.collect()['settings']['training']['lokr_factor'], 8)
-        self.assertEqual(self.app.status.get(), 'Character LoKr applied (unsaved)')
+        self.assertFalse(hasattr(self.app, 'character_lokr_button'))
 
     def test_switch_preserves_unsaved_settings_and_language_on_restart(self):
         self.app.variables[('model', 'vae')].set('D:/モデル/{猫}.safetensors')

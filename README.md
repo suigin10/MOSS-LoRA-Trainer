@@ -3,7 +3,7 @@
 **MOSS-ImageのLoRAを作成する、Windows向け学習GUI。**
 Kohaku / sd-scriptsの導入から、データセット設定・学習・追加学習・LoRA出力まで操作できます。
 
-[最新版 v0.2.3 をダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
+[公開済みリリース v0.2.3](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
 
 <img src="docs/images/amber-ui.png" alt="琥珀色UIの学習設定画面" width="800">
 
@@ -13,7 +13,7 @@ Kohaku / sd-scriptsの導入から、データセット設定・学習・追加�
 Kohakuには対応するNVIDIAドライバとVisual Studio Build ToolsのC++ワークロードも必要です。
 モデルの入手先と12GB向け設定は[設定ガイド](docs/STABLE_SETTINGS.md)を参照してください。
 
-1. [最新版のZIP](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest)を展開し、`Start MOSS LoRA Trainer.bat` を起動します。
+1. [最新ソースZIP](https://github.com/suigin10/MOSS-LoRA-Trainer/archive/refs/heads/main.zip)を展開し、`Start MOSS LoRA Trainer.bat` を起動します。
 2. 右上の「かんたん導入」で学習エンジンと専用環境を作成します。
 3. 「01 モデル」でモデル、「02 データセット」で教師画像を指定します。
 4. 学習設定を確認し、「学習前チェック」→「学習を開始」を押します。
@@ -25,12 +25,21 @@ GUIはPython標準のtkinterで動作します。学習用パッケージとTrit
 - **2つの学習エンジン：** 新規プロジェクトはKohaku。sd-scriptsも選択できます。
 - **プロジェクト管理：** 設定の保存・コピー・読み込みに対応。起動時は最後のプロジェクトを復元し、見つからなければデフォルトで新規作成します。
 - **学習と追加学習：** キャッシュ準備、stateからの再開、ログ・進捗・VRAM表示、サンプル生成に対応します。
-- **学習方式：** LoRA / LoKr / LoHaを選択可能。「キャラクターLoKr」プリセットで学習条件を一括設定できます（機能・設定値は実験的）。cosine・再スタート付きcosine・polynomialなどのSchedulerに対応します。
+- **学習方式：** LoRA / LoKr / LoHaを選択可能。cosine・再スタート付きcosine・polynomialなどのSchedulerに対応します。
 - **LoRA出力：** KohakuはComfyUI形式・LyCORIS形式で保存。GUIの表示言語は日本語／英語を切り替えられます。
+
+## mainブランチの更新内容（2026-10-27）
+
+[最新ソースZIPをダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/archive/refs/heads/main.zip)。公開済みリリースv0.2.3には以下の変更は含まれません。更新時はアプリを閉じ、`data/`と`backend/`を保持してアプリ本体を置き換えてください。
+
+- 新規作成画面で学習エンジンを選択。KohakuはRank / Alpha 8 / 4、AdamW8bit、LR 0.0002、cosine、512px、EMA 0.99、上限4000STEP・100STEP保存。途中保存を比較して採用STEPを選べます。
+- sd-scriptsは公式MOSSガイドの設定例（Rank / Alpha 16 / 1、LR 0.0001、constant、10エポック、truncated_logit_normal）に準拠。
+- Kohakuでも除外・包含パターンを使用可能。新規Kohakuではブロック22を学習対象から除外。容量別プリセットとキャラクターLoKrのボタンは削除しました。
+- 既存プロジェクトの保存値は維持します。詳細は[設定ガイド](docs/STABLE_SETTINGS.md)を参照してください。
 
 ## キャラクターLoKrの実機確認・生成物の配布
 
-RTX 4070 12GBで、KohakuのキャラクターLoKr（Rank / Alpha 32 / 32・attn-mlp・4000STEP）の学習完走を利用者の実機で確認しました。プリセットの機能・設定値は引き続き実験的です。
+RTX 4070 12GBで、KohakuのキャラクターLoKr（Rank / Alpha 32 / 32・attn-mlp・4000STEP）の学習完走を利用者の実機で確認しました。この学習条件は参考例です。
 
 **学習した生成物の配布には、小さいLyCORIS版（`*-lycoris.safetensors`）を推奨します。** 今回の確認例ではLyCORIS版が約18MB、ComfyUI版が約2.2GBでした。ComfyUI版はQKVの互換性変換で大きくなる場合があり、容量差は学習内容を削ったことによるものではありません。
 
@@ -62,3 +71,7 @@ Kohakuは名称条件付きのKohakuMoss License 1.0で、主要表示名にKoha
 - [Anima Standalone Trainer](https://github.com/gazingstars123/Anima-Standalone-Trainer)：GUI・プロジェクト管理の参考
 
 本プロジェクトは独立したGUIであり、上記プロジェクトの公式製品ではありません。
+
+### Kohakuの除外・包含パターン
+
+GUIの除外・包含パターンはKohakuでも使用できます。1行につき1つの正規表現を入力し、モジュール名に完全一致した場合に適用します。例：`layers[.]22[.].*`でブロック22を除外します。包含は除外の例外として優先され、選択した学習対象（attn / attn-mlp / ffn-down）の範囲を広げません。学習対象が変わるため、パターンを変更するときは新規学習してください。

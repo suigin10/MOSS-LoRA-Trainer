@@ -2,21 +2,24 @@
 
 ## 学習の開始設定
 
-| 項目 / Setting | Kohaku（新規初期値） | sd-scripts（手動で設定） |
+| 項目 / Setting | Kohaku（新規初期値） | sd-scripts（公式ガイドの設定例） |
 | --- | --- | --- |
-| 解像度 / Resolution | 1024 | 1024 |
+| 解像度 / Resolution | 512 | 1024 |
 | 学習方式 / Adapter type | LoRA | LoRA |
-| Rank / Alpha | 16 / 16 | 16 / 16 |
-| Optimizer | AdamW | AdamW |
-| 学習率 / Learning rate | 0.0001 | 0.0001 |
-| Scheduler | cosine | cosine |
-| Warmup | 100 steps | 100 steps |
+| Rank / Alpha | 8 / 4 | 16 / 1 |
+| Optimizer | AdamW8bit | AdamW8bit |
+| 学習率 / Learning rate | 0.0002 | 0.0001 |
+| Scheduler | cosine | constant |
+| Warmup | 100 steps | 0 |
 | 最小学習率の比率 / Minimum LR ratio | 0.1（初期学習率の10%） | 対象外 |
 | 学習対象 / Training target | attn-mlp（Attention＋FFN） | 標準（または下記のFFN_down指定） |
-| 最大STEP / Total steps | 2500 | 2500 |
-| 保存間隔 / Save interval | 100 steps | 100 steps |
-| Caption dropout | 0.1（自然文は0推奨） | 0.05（自然文は0推奨） |
-| Timestep sampling | sigma | sigma |
+| 最大STEP / Total steps | 4000 | 10 epochs |
+| 保存間隔 / Save interval | 100 steps | 1 epoch |
+| Weight decay | 0.0001 | Optimizerの既定値 |
+| EMA | 0.99 | 対象外 |
+| 学習除外 / Excluded modules | `layers[.]22[.].*` | 必要に応じて指定 |
+| Caption dropout | 0 | 0 |
+| Timestep sampling | sigma | truncated_logit_normal |
 | 学習用 flow shift | 1.0 | 1.0 |
 | Sigmoid scale | 1.0 | 1.0 |
 | 勾配クリップ / Gradient clipping | 1 | 1 |
@@ -24,8 +27,10 @@
 | キャプション上限（01モデル） | 4096 | 4096 |
 | 画像＋テキスト上限（04 VRAM） | 6144 | 対象外 |
 
-STEP数・保存間隔は自由に変更できます。エンジンを切り替えても学習条件は自動上書きされないため、sd-scriptsでは右列を参考に設定してください。
-Switching engines does not reset training settings. Apply the right-hand column manually for sd-scripts.
+新規プロジェクトの作成画面で学習エンジンを選択すると、そのエンジンの初期値を適用します。既存プロジェクトのエンジン切り替えでは設定を上書きしません。sd-scriptsは同梱の公式ガイド`docs/moss_image_train_network.md`のコマンド例に準拠します。学習率は公式でも一例とされており、データセットに応じて調整してください。
+Choose the engine in the new-project dialog to apply its defaults. Switching an existing project preserves its settings.
+
+4000STEPは学習の上限として余裕を持たせた値です。100STEPごとの保存結果を比較し、用途に合う途中のチェックポイントを選んでください。保存済みプロジェクトや実行中の設定は変更しません。
 
 ## 12GB向けのメモリ設定
 
@@ -43,7 +48,7 @@ Switching engines does not reset training settings. Apply the right-hand column 
 
 - Kohakuのautoはモデルの保存精度を使います。12GBではINT8のDiT・Qwenファイルを指定してください。
 - KohakuでVRAMが不足する場合は、メモリ構成をckpt-ring4-actoff-optstream-gradoffへ変更します。
-- VRAMプリセットはメモリ関連項目とbatchのみ変更します。sd-scriptsの16GBはINT8 / swap 0、24GB以上はbf16 / swap 0が開始値です。
+- 容量別プリセットのボタンは廃止しました。量子化・swap・batchは必要に応じて個別に調整してください。
 
 ## LoRA / LoKr / LoHa
 
@@ -61,11 +66,11 @@ Kohakuの出力は従来どおりComfyUI形式・LyCORIS形式の2種類です�
 
 [参考ガイド](https://www.imagelora.dev/guides/how-to-train-moss-image-lora)のLoKr設定は別の学習ツールの例です。factor 8を全データセット共通の推奨値とはしていません。[sd-scripts公式](https://github.com/kohya-ss/sd-scripts/blob/main/docs/loha_lokr.md)
 
-### キャラクターLoKr プリセット（実験的）
+### キャラクターLoKrの参考設定（実験的）
 
 機能・設定値は実験的です。
 
-「03 学習」の「キャラクターLoKr（実験的）」を押すと、[MOSS Image character recipe that works](https://www.imagelora.dev/guides/how-to-train-moss-image-lora)を参考に以下を設定します。「01 モデル」にはMOSS Image BaseのConvRot INT8モデルとQwenのConvRot INT8ファイルを指定してください。
+一括設定ボタンは廃止しました。以下は過去の参考設定です。[MOSS Image character recipe that works](https://www.imagelora.dev/guides/how-to-train-moss-image-lora)を参考にした設定です。「01 モデル」にはMOSS Image BaseのConvRot INT8モデルとQwenのConvRot INT8ファイルを指定してください。
 
 | 項目 | 設定 |
 | --- | --- |
@@ -82,9 +87,11 @@ Kohakuの出力は従来どおりComfyUI形式・LyCORIS形式の2種類です�
 | 解像度 | 512 |
 | DiT・Qwen ConvRot INT8 | ON |
 
-適用すると再開state・初期重みの指定を解除します。設定を確認して保存してください。Kohakuでは通常版に加えて`-ema0.99-comfy.safetensors`・`-ema0.99-lycoris.safetensors`も出力し、再開stateにEMA状態を保存します。
+学習条件を変更するときは再開state・初期重みの指定を解除し、設定を確認して保存してください。Kohakuでは通常版に加えて`-ema0.99-comfy.safetensors`・`-ema0.99-lycoris.safetensors`も出力し、再開stateにEMA状態を保存します。
 
 ## 学習対象
+
+除外・包含パターンは両エンジンに対応します。1行1正規表現、モジュール名に完全一致、包含は除外の例外として優先されます。Kohakuでは選択した学習対象の範囲内で適用します。新規Kohakuプロジェクトは`layers[.]22[.].*`でブロック22を学習から除外します。サンプル生成用のSkip layersとは別設定です。
 
 「03 学習」のKohaku学習対象は、attn-mlp（Attention＋FFN、初期値）、ffn-down（FFN_downのみ）、attn（Attentionのみ）から選べます。ffn-downは全ブロックのFFN_downだけを学習します。画風LoRAの比較用に使えますが、効果はデータセットによって異なります。対象を変える場合は再開stateを外し、新規学習してください。対象欄のなかった既存プロジェクトは従来のattn-mlpを引き継ぎます。
 
@@ -107,7 +114,7 @@ sd-scriptsでもFFN_downのみを試す場合は「05 Flow・LoRA 詳細」で�
 
 ## Optimizer
 
-両エンジンの新規初期値はAdamW、Schedulerはcosine・warmup 100です。AdamW8bitとCAMEも選べます。CAMEに切り替えても学習率・Schedulerは自動変更しません。CAMEはpytorch-optimizer 4.0.0を使い、専用環境へ「かんたん導入」で追加できます。KohakuではGPU上で通常stepを実行し、CAME標準のbetas=(0.9, 0.999, 0.9999)、eps1=1e-30、eps2=1e-16を使用します。Optimizerを変える場合はstateを外して新規学習してください。
+両エンジンの初期OptimizerはAdamW8bitです。Kohakuはcosine・warmup 100、sd-scriptsは公式ガイドの例に合わせconstant・warmup 0を使用します。AdamWとCAMEも選べます。CAMEに切り替えても学習率・Schedulerは自動変更しません。CAMEはpytorch-optimizer 4.0.0を使い、専用環境へ「かんたん導入」で追加できます。KohakuではGPU上で通常stepを実行し、CAME標準のbetas=(0.9, 0.999, 0.9999)、eps1=1e-30、eps2=1e-16を使用します。Optimizerを変える場合はstateを外して新規学習してください。
 
 ## Schedulerの比較
 

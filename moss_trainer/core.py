@@ -29,7 +29,7 @@ FIELDS = {
         'moss_max_token_length': ('キャプションの最大トークン数', 4096, None, 'テキストのみの上限。初期値4096。短くすると長い説明が切れます。画像との合計上限は04 VRAMのKohaku設定'),
     },
     'dataset': {
-        'resolution': ('学習解像度', 1024, None, '正方形の基準解像度。16 の倍数'),
+        'resolution': ('学習解像度', 512, None, '正方形の基準解像度。16 の倍数'),
         'batch_size': ('バッチサイズ', 1, None, 'VRAM 12GB のビデオカード向け開始値は 1'),
         'enable_bucket': ('アスペクト比 bucket', True, None, '縦横比ごとに学習解像度を調整'),
         'bucket_reso_steps': ('Bucket 刻み', 64, None, '16 の倍数'),
@@ -38,7 +38,7 @@ FIELDS = {
         'bucket_no_upscale': ('小さい画像を拡大しない', True, None, ''),
         'caption_extension': ('キャプション拡張子', '.txt', None, '画像と同じ名前の .txt を使用'),
         'enable_multiline_caption': ('複数行キャプション', True, None, '自然文キャプションの改行を保持'),
-        'caption_dropout_rate': ('Caption dropout', 0.1, None, '自然文キャプションでは0推奨。Kohaku公式初期値0.1。TE キャッシュと併用可能'),
+        'caption_dropout_rate': ('Caption dropout', 0.0, None, 'Kohakuの初期値0。TE キャッシュと併用可能'),
         'shuffle_caption': ('キャプションをシャッフル', False, None, 'TE キャッシュと併用不可。自然文では通常 OFF'),
         'color_aug': ('色の拡張', False, None, 'Latent キャッシュと併用不可'),
         'random_crop': ('ランダムクロップ', False, None, 'Latent キャッシュと併用不可'),
@@ -47,20 +47,20 @@ FIELDS = {
         'output_name': ('出力 LoRA 名', 'moss_lora', None, 'safetensors のファイル名（拡張子不要）'),
         'network_algo': ('学習方式', 'LoRA', ['LoRA', 'LoKr', 'LoHa'], '両エンジンに対応。方式を変更するときはstateを外して新規学習してください'),
         'lokr_factor': ('LoKr factor', -1, None, 'LoKr専用。-1は自動分解、正の整数で分解係数を指定（例: 8）。Rankが同じでも方式によりパラメーター数が異なります'),
-        'network_dim': ('Rank / dim', 16, None, 'このGUIの初期値16。方式・データセットに応じて調整'),
-        'network_alpha': ('Alpha', 16.0, None, 'このGUIの初期値16。Rank・Alphaはstate再開時に変更できません'),
+        'network_dim': ('Rank / dim', 8, None, 'Kohakuの初期値8。方式・データセットに応じて調整'),
+        'network_alpha': ('Alpha', 4.0, None, 'Kohakuの初期値4。Rank・Alphaはstate再開時に変更できません'),
         'kohaku_train_target': ('Kohaku: 学習対象', 'attn-mlp', ['ffn-down', 'attn-mlp', 'attn'], 'ffn-down: FFN_downのみ / attn-mlp: Attention＋FFN / attn: Attentionのみ。対象を変更するときは新規学習してください'),
-        'learning_rate': ('学習率', 0.0001, None, '固定の最適値ではありません。データセットに応じて調整'),
-        'optimizer_type': ('Optimizer', 'AdamW', ['AdamW', 'AdamW8bit', 'CAME', 'Adafactor'], '両エンジンの初期値はAdamW。CAMEは「かんたん導入」で必要パッケージを追加。Adafactorはsd-scripts専用'),
-        'weight_decay': ('Weight decay', '', None, '空欄は各Optimizerの既定値。記事のキャラクターレシピは0.00005'),
-        'kohaku_ema': ('Kohaku: EMA decay', 0.0, None, '0で無効。0より大きく1未満で有効（例: 0.99）。sd-scriptsでは適用されません'),
+        'learning_rate': ('学習率', 0.0002, None, '固定の最適値ではありません。データセットに応じて調整'),
+        'optimizer_type': ('Optimizer', 'AdamW8bit', ['AdamW', 'AdamW8bit', 'CAME', 'Adafactor'], '初期値はAdamW8bit。CAMEは「かんたん導入」で必要パッケージを追加。Adafactorはsd-scripts専用'),
+        'weight_decay': ('Weight decay', '0.0001', None, '空欄は各Optimizerの既定値。'),
+        'kohaku_ema': ('Kohaku: EMA decay', 0.99, None, '0で無効。0より大きく1未満で有効（例: 0.99）。sd-scriptsでは適用されません'),
         'lr_scheduler': ('LR scheduler', 'cosine', ['constant', 'constant_with_warmup', 'cosine', 'cosine_with_restarts', 'linear', 'polynomial'], '初期値cosine。cosine_with_restartsは周期ごとに学習率を上げ直します。state再開では元の設定を維持'),
         'lr_scheduler_num_cycles': ('Restart周期数', 2, None, 'cosine_with_restarts専用。2は2周期（途中の再スタート1回）。warmupは学習開始時のみ'),
         'lr_scheduler_power': ('Polynomial power', 1.0, None, 'polynomial専用。1は直線的に減衰、1より大きいと早めに減衰。両エンジンで最終学習率は0'),
         'lr_warmup_steps': ('Warmup steps', 100, None, 'Kohaku公式初期値100。開始時に学習率を徐々に上げるstep数。constantでは使用しません'),
         'kohaku_lr_min_ratio': ('Kohaku: 最小学習率の比率', 0.1, None, 'cosine・cosine_with_restarts専用。0.1は初期学習率の10%。既存設定の未指定値は従来の0を維持'),
         'max_train_epochs': ('学習エポック数（steps=0 時）', 10, None, '最大 steps が 0 の場合だけ使用'),
-        'max_train_steps': ('最大 steps（0: エポック指定）', 2500, None, 'このGUIの開始値2500。画像数・学習対象に応じて調整'),
+        'max_train_steps': ('最大 steps（0: エポック指定）', 4000, None, 'Kohakuの開始値4000。途中保存を比較して採用STEPを選択'),
         'gradient_accumulation_steps': ('勾配累積', 1, None, '実効バッチ数 = バッチサイズ × 勾配累積'),
         'max_grad_norm': ('勾配クリップ', 1.0, None, 'Adafactor 選択時は書き出し時に 0 を使用'),
         'save_every_n_epochs': ('何エポックごとに保存（0: 無効）', 0, None, ''),
@@ -97,7 +97,7 @@ FIELDS = {
         'compile': ('torch.compile', False, None, '追加環境が必要。まず OFF で動作を確認'),
     },
     'flow': {
-        'timestep_sampling': ('Timestep sampling', 'sigma', ['sigma', 'uniform', 'sigmoid', 'shift', 'flux_shift'], '初期値sigma。Kohakuはsigmaとshiftに対応。sigmaは従来のMOSS方式'),
+        'timestep_sampling': ('Timestep sampling', 'sigma', ['sigma', 'uniform', 'sigmoid', 'shift', 'flux_shift', 'truncated_logit_normal'], '初期値sigma。Kohakuはsigmaとshiftに対応。sigmaは従来のMOSS方式'),
         'weighting_scheme': ('Weighting scheme', 'logit_normal', ['logit_normal', 'uniform', 'sigma_sqrt', 'cosmap', 'none', 'mode'], ''),
         'logit_mean': ('Logit mean', -1.09, None, ''),
         'logit_std': ('Logit std', 0.95, None, ''),
@@ -106,7 +106,7 @@ FIELDS = {
         'mode_scale': ('Mode scale', 1.29, None, 'weighting_scheme=mode の場合に使用'),
         'train_text_embedder': ('DiT の Text embedder も学習', False, None, 'Qwen の学習とは別。TE キャッシュと併用可'),
         'embedder_lr': ('Text embedder の学習率', 0.00005, None, 'Text embedder ON かつモジュール別学習率が空欄のとき適用'),
-        'exclude_patterns': ('除外パターン（1行1正規表現）', '', 'multiline', '例: .*ffn.*'),
+        'exclude_patterns': ('除外パターン（1行1正規表現）', 'layers[.]22[.].*', 'multiline', '例: .*ffn.*'),
         'include_patterns': ('包含パターン（1行1正規表現）', '', 'multiline', '除外指定より優先。re.fullmatch で一致'),
         'network_reg_dims': ('モジュール別 rank', '', None, r'例: .*proj\.[qkvo]=8,.*ffn.*=16'),
         'network_reg_lrs': ('モジュール別学習率', '', None, '例: .*text_embedder.*=5e-5（embedder 学習率より優先）'),
@@ -132,16 +132,24 @@ FIELDS = {
 ENV_DEFAULTS = {'python': '', 'sd_scripts': '', 'kohaku_python': '', 'kohaku_source': ''}
 
 
-def defaults(backend_name='kohaku'):
+def defaults(backend_name='kohaku', *, legacy=False):
     settings = {group: {key: copy.deepcopy(spec[1]) for key, spec in fields.items()} for group, fields in FIELDS.items()}
     if backend_name == 'sd-scripts':
-        # Historical fallback for saved projects/snapshots, not a backend-switch action.
+        # Preserve historical missing-field values only when loading old projects.
         settings['memory']['backend'] = 'sd-scripts'
         settings['training'].update(network_dim=16, network_alpha=1.0, optimizer_type='AdamW8bit',
                                     lr_scheduler='constant', lr_warmup_steps=0, kohaku_lr_min_ratio=0.0,
                                     max_train_steps=1500, save_every_n_steps=100, kohaku_train_target='attn-mlp', learning_rate=0.0001)
-        settings['dataset']['caption_dropout_rate'] = 0.05
+        settings['training'].update(weight_decay='', kohaku_ema=0.0)
+        settings['dataset'].update(resolution=1024, caption_dropout_rate=0.05)
+        settings['flow']['exclude_patterns'] = ''
         settings['flow'].update(timestep_sampling='sigma', discrete_flow_shift=1.0)
+        if not legacy:
+            # sd-scripts/docs/moss_image_train_network.md, section 4 example.
+            settings['training'].update(max_train_steps=0, max_train_epochs=10,
+                                        save_every_n_steps=0, save_every_n_epochs=1)
+            settings['dataset']['caption_dropout_rate'] = 0.0
+            settings['flow']['timestep_sampling'] = 'truncated_logit_normal'
     return settings
 
 
@@ -191,13 +199,13 @@ class ProjectStore:
             raise ValueError(tr('プロジェクト ID が不正です'))
         return self.root / pid
 
-    def create(self, name, source=None, *, preserve_output_name=False, model_settings=None):
+    def create(self, name, source=None, *, preserve_output_name=False, model_settings=None, backend_name='kohaku'):
         name = name.strip()
         if not name or len(name) > 100:
             raise ValueError(tr('名前は 1〜100 文字で入力してください'))
         if any(p['name'].casefold() == name.casefold() for p in self.list()):
             raise ValueError(tr('同じ名前のプロジェクトがあります'))
-        settings = copy.deepcopy(source['settings']) if source else defaults()
+        settings = copy.deepcopy(source['settings']) if source else defaults(backend_name)
         if source is None and model_settings is not None:
             # Keep the selected models while starting a fresh training plan.
             settings['model'] = {key: copy.deepcopy(model_settings.get(key, spec[1]))
@@ -242,7 +250,7 @@ class ProjectStore:
             if not isinstance(sub.get('image_dir'), str) or type(sub.get('num_repeats')) is not int or not isinstance(sub.get('class_tokens'), str):
                 raise ValueError(tr('画像サブセットの型が不正です'))
         # Missing known fields get defaults; unknown fields are rejected, never silently launched.
-        merged = defaults('sd-scripts')
+        merged = defaults('sd-scripts', legacy=True)
         # A project saved before backend selection existed always used sd-scripts.
         merged['memory']['backend'] = p['settings'].get('memory', {}).get('backend', 'sd-scripts')
         for group, values in p['settings'].items():
@@ -485,7 +493,7 @@ def resume_differences(project, info):
                     and info.get('can_change_memory_profile')):
                 # These profiles keep the same unfused bitsandbytes optimizer state.
                 continue
-            original = source['settings'].get(group, {}).get(key, 'sd-scripts' if key == 'backend' else 0.0 if key == 'kohaku_lr_min_ratio' else defaults('sd-scripts')[group][key])
+            original = source['settings'].get(group, {}).get(key, 'sd-scripts' if key == 'backend' else 0.0 if key == 'kohaku_lr_min_ratio' else defaults('sd-scripts', legacy=True)[group][key])
             if project['settings'][group][key] != original:
                 differences.append(tr('state 再開の設定差: {p0}。元設定を復元するか、LoRA 重みから追加学習してください', p0=tr(FIELDS[group][key][0])))
     if project['subsets'] != source['subsets']:

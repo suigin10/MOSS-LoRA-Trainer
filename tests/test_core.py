@@ -22,7 +22,7 @@ class CoreTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.store = ProjectStore(self.root / 'projects')
         self.p = self.store.create('テスト project')
-        self.p['settings'] = defaults('sd-scripts')
+        self.p['settings'] = defaults('sd-scripts', legacy=True)
         self.images = self.root / '画像 with spaces'
         self.images.mkdir()
         (self.images / '猫.png').write_bytes(b'fixture')
@@ -472,3 +472,19 @@ class CoreTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OfficialSdScriptsDefaultsTests(unittest.TestCase):
+    def test_official_example_and_legacy_defaults_are_separate(self):
+        from moss_trainer.core import defaults
+        settings = defaults('sd-scripts')
+        training, flow = settings['training'], settings['flow']
+        self.assertEqual((training['network_dim'], training['network_alpha']), (16, 1.0))
+        self.assertEqual((training['optimizer_type'], training['learning_rate'], training['lr_scheduler']),
+                         ('AdamW8bit', 1e-4, 'constant'))
+        self.assertEqual((training['max_train_steps'], training['max_train_epochs'], training['save_every_n_epochs']), (0, 10, 1))
+        self.assertEqual((flow['timestep_sampling'], flow['logit_mean'], flow['logit_std']),
+                         ('truncated_logit_normal', -1.09, 0.95))
+        self.assertEqual(flow['exclude_patterns'], '')
+        self.assertEqual(defaults('sd-scripts', legacy=True)['training']['max_train_steps'], 1500)
+        self.assertEqual(defaults()['training']['network_dim'], 8)

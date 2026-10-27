@@ -505,7 +505,6 @@
   "Polynomial powerは0より大きい値にしてください。": "Polynomial power must be positive.",
   "学習方式: {p0}": "Adapter type: {p0}",
   "LoHa・LoKrのMOSS対応には新しいsd-scriptsが必要です。「かんたん導入」で別のフォルダに専用環境を作成してください。": "LoHa / LoKr for MOSS requires a recent sd-scripts checkout. Use Easy setup to create an environment in a new folder.",
-  "空欄は各Optimizerの既定値。記事のキャラクターレシピは0.00005": "Blank uses the optimizer default. The article character recipe uses 0.00005.",
   "0で無効。0より大きく1未満で有効（例: 0.99）。sd-scriptsでは使用できません": "0 disables EMA. Values between 0 and 1 enable it (e.g. 0.99). Not available in sd-scripts.",
   "Weight decayは0以上の有限の数値にしてください。": "Weight decay must be a finite nonnegative number.",
   "EMA decayは0以上1未満にしてください。": "EMA decay must be at least 0 and less than 1.",
@@ -523,5 +522,12 @@
   "機能・設定値は実験的です。LoKr factor 8 / 512px / batch 2 × 勾配累積 2": "The feature and settings are experimental. LoKr factor 8 / 512px / batch 2 × accumulation 2",
   "プロジェクトフォルダ": "Project folder",
   "最新の学習フォルダ": "Latest training folder",
-  "プロジェクトフォルダ＝設定・全学習履歴 ／ 最新の学習フォルダ＝1回分のモデル・ログ": "Project folder: settings and all training runs / Latest training folder: models and logs for one run"
+  "プロジェクトフォルダ＝設定・全学習履歴 ／ 最新の学習フォルダ＝1回分のモデル・ログ": "Project folder: settings and all training runs / Latest training folder: models and logs for one run",
+  "空欄は各Optimizerの既定値。": "Leave blank to use each optimizer's default.",
+  "Kohakuの初期値8。方式・データセットに応じて調整": "Kohaku default: 8. Adjust for the algorithm and dataset.",
+  "Kohakuの初期値4。Rank・Alphaはstate再開時に変更できません": "Kohaku default: 4. Rank and Alpha cannot change when resuming state.",
+  "初期値はAdamW8bit。CAMEは「かんたん導入」で必要パッケージを追加。Adafactorはsd-scripts専用": "Default: AdamW8bit. Install CAME dependencies with Easy Setup. Adafactor is sd-scripts only.",
+  "Kohakuの初期値0。TE キャッシュと併用可能": "Kohaku default: 0. Compatible with the text encoder cache.",
+  "選択した学習エンジンのデフォルト値から作成": "Create with defaults for the selected training engine",
+  "Kohakuの開始値4000。途中保存を比較して採用STEPを選択": "Kohaku starting limit: 4000. Compare saved checkpoints to choose the training step to use."
 }

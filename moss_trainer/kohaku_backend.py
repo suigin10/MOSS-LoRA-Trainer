@@ -1,19 +1,50 @@
 """Generate Kohaku configs without importing GPU libraries into the GUI."""
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from .i18n import tr
 
 
-def training_preset(training):
+def _scoped_pattern(pattern):
+    """Embed a validated regex without losing leading global flags."""
+    compiled = re.compile(pattern)
+    body = pattern
+    while True:
+        match = re.match(r'\s*\(\?[aiLmsux]+\)', body)
+        if not match:
+            break
+        body = body[match.end():]
+    flags = ''.join(letter for flag, letter in ((re.A, 'a'), (re.I, 'i'),
+                    (re.M, 'm'), (re.S, 's'), (re.X, 'x')) if compiled.flags & flag)
+    # Terminate trailing comments in verbose expressions before closing the scope.
+    return f'(?{flags}:{body}' + ('\n' if compiled.flags & re.X else '') + ')'
+
+
+def training_preset(training, flow=None):
     # Missing fields belong to projects created before target selection existed.
     target = training.get('kohaku_train_target', 'attn-mlp')
     if target == 'ffn-down':
-        return {'target_name': [r'layers\.\d+\.proj\.ffn_down$']}
-    if target in ('attn-mlp', 'attn'):
-        return target
-    raise ValueError(tr('Kohaku: 学習対象が不正です。'))
+        names = [r'layers\.\d+\.proj\.ffn_down$']
+    elif target in ('attn-mlp', 'attn'):
+        names = [r'layers\.\d+\.proj\.(q|k|v|o)$']
+        if target == 'attn-mlp':
+            names.append(r'layers\.\d+\.proj\.(ffn_up_gate|ffn_down)$')
+    else:
+        raise ValueError(tr('Kohaku: 学習対象が不正です。'))
+    flow = flow or {}
+    excluded = [line.strip() for line in flow.get('exclude_patterns', '').splitlines() if line.strip()]
+    included = [line.strip() for line in flow.get('include_patterns', '').splitlines() if line.strip()]
+    if not excluded:
+        return {'target_name': names} if target == 'ffn-down' else target
+    excludes = '|'.join(_scoped_pattern(p) for p in excluded)
+    includes = '|'.join(_scoped_pattern(p) for p in included)
+    # Match actual targets rather than pruning parents and their included children.
+    # Includes override exclusions; they do not broaden the selected training target.
+    override = f'(?!(?:{includes})\\Z)' if included else ''
+    guard = f'(?!{override}(?:{excludes})\\Z)'
+    return {'target_name': [guard + name for name in names], 'use_fnmatch': False}
 
 
 def timestep_knobs(flow):
@@ -45,7 +76,7 @@ def problems(project):
     need(not d['shuffle_caption'] and not d['color_aug'] and not d['random_crop'],
          tr('Kohaku: Caption shuffle・色拡張・ランダムクロップをOFFにしてください。'))
     need(m['kohaku_max_tokens'] >= 1024, tr('Kohaku: トークン上限は1024以上にしてください。'))
-    need(not f['train_text_embedder'] and not any(f[k] for k in ('exclude_patterns', 'include_patterns', 'network_reg_dims', 'network_reg_lrs')),
+    need(not f['train_text_embedder'] and not any(f[k] for k in ('network_reg_dims', 'network_reg_lrs')),
          tr('Kohaku: Text embedder学習とモジュール別の指定には未対応です。'))
     need(f['timestep_sampling'] in ('sigma', 'shift') and f['weighting_scheme'] == 'logit_normal',
          tr('Kohaku: Timestepはsigmaまたはshift、Weighting schemeはlogit_normalを選択してください。'))
@@ -138,7 +169,7 @@ def knobs(project, run_dir):
         'CACHE_DIR': cache_directory(project, run_dir).as_posix(),
         'NUM_WORKERS': m['max_data_loader_n_workers'], 'DATA_SCAN_WORKERS': max(1, m['num_cpu_threads_per_process']),
         'SEED': t['seed'], 'ALGO': t.get('network_algo', 'LoRA').lower(),
-        'ALGO_KWARGS': {'factor': t.get('lokr_factor', -1)} if t.get('network_algo') == 'LoKr' else {}, 'PRESET': training_preset(t),
+        'ALGO_KWARGS': {'factor': t.get('lokr_factor', -1)} if t.get('network_algo') == 'LoKr' else {}, 'PRESET': training_preset(t, f),
         'DIM': t['network_dim'], 'ALPHA': float(t['network_alpha']),
         'DROPOUT': {'input': 0.0, 'rank': f['rank_dropout'], 'module': f['module_dropout']},
         'TIMESTEP': timestep, 'TIMESTEP_KWARGS': timestep_kwargs,

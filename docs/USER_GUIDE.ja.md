@@ -4,13 +4,13 @@
 
 MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 3.11 以上で `Start MOSS LoRA Trainer.bat` をダブルクリックして起動します。GUI 自体に追加の pip パッケージは不要です（tkinter が必要）。学習環境は「かんたん導入」で作成できます。モデルファイルは別途用意してください。
 
-対象GPUは CUDA / bf16 対応の NVIDIA ビデオカードです。推奨設定は特定の機種名ではなく、VRAM容量別に用意しています。新規プロジェクトのエンジンはKohakuです。初期値は VRAM 12GB のビデオカード向けで、16GB・24GB以上のプリセットも選べます。
+対象GPUは CUDA / bf16 対応の NVIDIA ビデオカードです。新規作成画面でKohakuまたはsd-scriptsを選び、エンジン別の初期値から開始できます。初期選択はKohakuです。容量別プリセットのボタンは廃止し、量子化・swap・batchは個別に調整します。
 
 画面はネイビーとティールを基調にしています。白い欄は直接入力、淡いティールの欄はクリックして選択、グレーの欄は無効状態です。選択中のタブや主要操作は濃いティールで表示します。
 
 設定ページ内のホイール操作はページのスクロールに使います。閉じたOptimizer等のドロップダウン上でも値は変わりません。値を変える場合はリストを開いて選択してください。
 
-**モデル選びは同梱の [設定・モデルガイド](STABLE_SETTINGS.md) を参照してください。** VRAM 12GB・16GB・24GB以上ごとの具体的なファイル名、ダウンロード先、GUIプリセット、bf16分割ファイルの指定方法を記載しています。
+**モデル選びは同梱の [設定・モデルガイド](STABLE_SETTINGS.md) を参照してください。** VRAM 12GB・16GB・24GB以上ごとの具体的なファイル名、ダウンロード先、メモリ設定、bf16分割ファイルの指定方法を記載しています。
 
 ## かんたん導入（推奨）
 
@@ -35,7 +35,7 @@ MOSS-Image 専用の日本語デスクトップ GUI です。Windows の Python 
 3. 「保存して環境チェック」で CUDA / bf16 / パッケージを確認します。
 4. 「モデル」タブの各「参照…」で、DiT、Qwen3.5-9B、FLUX.2 VAE をファイル選択ダイアログから指定します。手入力もできます。
 5. 「データセット」で画像フォルダを選びます。同じフォルダに `image.png` と `image.txt` を置き、テキストはUTF-8で保存してください。複数フォルダはサブセットを追加します。
-6. 「VRAM・速度」タブで必要に応じてプリセットを選択し、学習対象に合わせて STEP 数などを調整します。「学習前チェック」後に「学習を開始」。
+6. 「VRAM・速度」タブで必要に応じてメモリ設定を調整し、学習対象に合わせて STEP 数などを調整します。「学習前チェック」後に「学習を開始」。
 
 ### 手動で学習用環境を準備する場合
 
@@ -74,7 +74,7 @@ sd-scripts の環境要件を優先してください。GUI と学習用 Python 
 
 ## 初期値と変更方法
 
-新規学習は16/16・AdamW・学習率1e-4・cosine、Attention＋FFN・学習上限2500STEP・100STEPごと保存が初期値です。このGUIではOptimizerは両エンジンともAdamW、Kohakuの学習対象はattn-mlp（Attention＋FFN）、保存間隔は100STEPにしています。「03 学習」のKohaku学習対象でffn-down（FFN_downのみ）・attn（Attentionのみ）にも切り替えられます。対象変更時は新規学習を開始してください。全設定とsd-scriptsの開始値は [設定ガイド](STABLE_SETTINGS.md) を参照してください。
+新規Kohakuの初期値はRank / Alpha 8 / 4・AdamW8bit・学習率0.0002・Weight decay 0.0001・cosine・warmup 100・学習率下限10%・Attention＋FFN・上限4000STEP・100STEP保存・512px・Caption dropout 0・EMA 0.99です。ブロック22を学習から除外します。4000STEPは余裕を持たせた上限で、途中保存を比較して採用するモデルを選んでください。sd-scriptsを新規作成時に選ぶと、公式ガイドの例に合わせRank / Alpha 16 / 1・LR 0.0001・constant・10エポック・truncated_logit_normalを使用します。既存設定は維持します。全設定は[設定ガイド](STABLE_SETTINGS.md)を参照してください。
 UIの値は保存済みプロジェクトの設定です。更新だけで既存値を新しい初期値へ上書きしません。
 CAMEも選択できます。必要パッケージは「かんたん導入」で追加します。既定のSchedulerはcosineです。比較用のcosine_with_restartsも選べます。Restart周期数は初期値2（2周期・再スタート1回）で、この方式を選んだときだけ編集できます。
 Timestepの新規初期値はsigma、学習用flow shiftは1.0です。Kohakuも対応します。方式を変える場合はstateを外して新規学習してください。自然文キャプションではCaption dropoutを0にすることを推奨します。
@@ -88,7 +88,7 @@ LoRAの保存間隔は自由に変更できます。例: 50 STEPごと、250 STE
 
 この方針はstateの保存回数ではなく保持数を減らします。保存時の書込み負荷と、一時的に新旧2つ分のディスク空き容量は必要です。古いstateを削除できなかった場合は警告をログに出し、学習を継続します。
 
-### VRAM プリセット（sd-scripts）
+### VRAM容量に応じた手動設定例（sd-scripts）
 
 | GPU VRAM | DiT / Qwen | CPU block swap |
 |---|---|---|
@@ -190,7 +190,7 @@ tensorboard/                   TensorBoard ログ
 python -m unittest discover -s tests -v
 ```
 
-RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）。別途、GUI 起動、ファイル選択の呼び出し、プロジェクト作成・コピー、STEP/epoch 切替、プリセット、TOML、設定競合、state 候補・復元、ログ、テスト子プロセスの起動・停止を自動テストしています。導入処理は、新しい venv の実作成、模擬ダウンロードによる導入・修復経路、失敗時の参照パス維持、設定登録をテストしています。自動テストでは実モデルのGPU学習・生成・state復元を実行していません。詳細は [開発・検証](../CONTRIBUTING.md#検証状況) を参照してください。
+RTX 4070（VRAM 12GB）で実機検証済みです（提供者による確認）。別途、GUI 起動、ファイル選択の呼び出し、プロジェクト作成・コピー、STEP/epoch 切替、エンジン別初期値、TOML、設定競合、state 候補・復元、ログ、テスト子プロセスの起動・停止を自動テストしています。導入処理は、新しい venv の実作成、模擬ダウンロードによる導入・修復経路、失敗時の参照パス維持、設定登録をテストしています。自動テストでは実モデルのGPU学習・生成・state復元を実行していません。詳細は [開発・検証](../CONTRIBUTING.md#検証状況) を参照してください。
 
 ## 参考資料
 
@@ -281,6 +281,6 @@ KohakuMossTrainerは **KohakuMoss License 1.0** です。Apache-2.0に第10条�
 
 「03 学習」でLoRA / LoKr / LoHaを選択できます（両エンジン対応、初期値LoRA）。LoKr factorはLoKr選択時だけ、Polynomial powerはpolynomial選択時だけ編集できます。方式・factor・Schedulerの変更時はstateを外し、新規学習してください。詳しくは[設定ガイド](STABLE_SETTINGS.md#lora--lokr--loha)を参照してください。
 
-「03 学習」の「キャラクターLoKr（実験的）」から、attn-mlp（Attention＋FFN）・4000STEP・Rank / Alpha 32 / 32・Swap 0・LoKr factor 8・AdamW8bit・学習率0.0001・Weight decay 0.00005・shift・解像度512・batch 2・勾配累積2・Kohaku EMA 0.99・ConvRot INT8を一括設定できます。適用すると再開stateと初期重みの指定を解除します。
+キャラクターLoKrの一括設定ボタンは廃止しました。LoKrは「学習方式」で選べます。KohakuのEMAは初期値0.99で、通常版に加えて平均化重みを出力します。
 
-キャラクターLoKrの機能・設定値は実験的です。
+除外・包含パターンは両エンジンに対応します。1行1正規表現でモジュール名に完全一致させ、包含を除外の例外として扱います。Kohakuでは選択した学習対象の範囲内に適用します。

@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from .i18n import tr
+from .kohaku_resume import resume_schedule
 
 
 def _scoped_pattern(pattern):
@@ -88,10 +89,11 @@ def problems(project):
              tr('Kohaku: サンプルの行内オプションには未対応です。共通パラメーターを使用してください。'))
     if t['resume']:
         info = state_info(Path(t['resume']))
-        source = info.get('snapshot')
-        if source and t['lr_scheduler'] != 'constant':
-            need(t['max_train_steps'] == source['settings']['training']['max_train_steps'],
-                 tr('Kohaku: constant以外のSchedulerでは再開時の総STEP変更に未対応です。元の総STEPを使用してください。'))
+        if not info['errors']:
+            try:
+                resume_schedule(t, info, {})
+            except (ValueError, KeyError, TypeError) as exc:
+                errors.append(str(exc))
     return errors
 
 
@@ -155,6 +157,11 @@ def knobs(project, run_dir):
                              'warmup': warmup if i == 0 else 0, 'value': 1.0,
                              'min_value': schedule['min_value']})
         schedule = {'mode': 'composer', 'end': -1, 'schedules': segments}
+    if t['resume']:
+        info = state_info(Path(t['resume']))
+        if info['errors']:
+            raise ValueError('\n'.join(info['errors']))
+        schedule = resume_schedule(t, info, schedule)
     out = {
         'WEIGHTS': s['model']['pretrained_model_name_or_path'],
         'VARIANT': 'sft' if 'moss_image_sft' in Path(s['model']['pretrained_model_name_or_path']).name.lower() else 'base',
@@ -226,6 +233,13 @@ def write_configs(project, env, run_dir):
     atomic_json(run_dir / 'project_snapshot.json', project)
     atomic_json(run_dir / 'environment_snapshot.json', env)
     atomic_json(run_dir / 'kohaku_knobs.json', values)
+    if values['RESUME']:
+        info = state_info(Path(values['RESUME']))
+        atomic_json(run_dir / 'resume_source.json', {key: value for key, value in info.items() if key != 'snapshot'})
+        atomic_json(run_dir / 'state_policy.json', {
+            'keep_latest_state_only': project['settings']['training']['keep_latest_state_only'],
+            'schedule': values['SCHEDULE'], 'source_total_steps': info.get('total_steps'),
+            'total_steps': values['STEPS'], 'saved_step': info['step']})
     argv = command(env, run_dir, project['settings'])
     atomic_json(run_dir / 'command.json', argv)
     return argv
@@ -256,6 +270,8 @@ def state_info(folder):
         if run_config.is_file():
             try:
                 config = json.loads(run_config.read_text(encoding='utf-8'))
+                if isinstance(config.get('SCHEDULE'), dict) and type(config.get('STEPS')) is int:
+                    info.update(schedule=config['SCHEDULE'], total_steps=config['STEPS'], learning_rate=config.get('LR'))
                 memory = config.get('MEMORY_OVERRIDES', {})
                 info['can_change_memory_profile'] = (config.get('OPTIMIZER') == 'adamw8bit'
                     and memory.get('optim_state') == 'gpu' and memory.get('fused_step') is False)

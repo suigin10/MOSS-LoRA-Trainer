@@ -41,15 +41,15 @@ class KohakuTests(unittest.TestCase):
     def test_kohaku_defaults_and_cosine_floor_are_exported(self):
         fresh = self.store.create('official')
         values = knobs(fresh, self.root)
-        self.assertEqual((values['DIM'], values['ALPHA']), (8, 4.0))
-        self.assertEqual(values['OPTIMIZER'], 'adamw8bit')
-        self.assertEqual(values['MEMORY_OVERRIDES'], {'optim_state': 'gpu', 'fused_step': False})
-        self.assertEqual(values['LR'], 2e-4)
-        self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 100, 'end': -1, 'min_value': 0.1})
+        self.assertEqual((values['DIM'], values['ALPHA']), (16, 16.0))
+        self.assertEqual(values['KEEP_LAST'], 1)
+        self.assertEqual(values['OPTIMIZER'], 'adamw')
+        self.assertEqual(values['MEMORY_OVERRIDES'], {})
+        self.assertEqual(values['LR'], 1e-4)
+        self.assertEqual(values['SCHEDULE'], {'mode': 'cosine', 'warmup': 0, 'end': -1, 'min_value': 0.1})
         self.assertEqual((values['STEPS'], values['SAVE_EVERY'], values['TEXT_DROP']), (4000, 100, 0.0))
-        self.assertEqual((values['WEIGHT_DECAY'], values['EMA'], values['TARGET_AREA']), (1e-4, 0.99, 512 ** 2))
-        self.assertFalse(any(re.match(p, 'layers.22.proj.q') for p in values['PRESET']['target_name']))
-        self.assertTrue(any(re.match(p, 'layers.21.proj.q') for p in values['PRESET']['target_name']))
+        self.assertEqual((values['WEIGHT_DECAY'], values['EMA'], values['TARGET_AREA']), (5e-5, 0.0, 1024 ** 2))
+        self.assertEqual(values['PRESET'], 'attn-mlp')
         self.assertEqual(values['TIMESTEP'], 'moss')
         self.assertEqual(values['TIMESTEP_KWARGS'], {'mu': -1.09, 's': 0.95, 'shift': 1.0, 'cutoff': 0.95, 'uniform_mix': 0.01})
         self.assertNotIn('kohaku_lr_min_ratio', training_config(fresh, self.root))
@@ -367,6 +367,40 @@ class KohakuTests(unittest.TestCase):
         self.assertTrue(resume_differences(self.p, info))
         (folder / 'optim.pt').unlink()
         self.assertTrue(state_info(folder)['errors'])
+
+    def test_cosine_extension_persists_effective_schedule_and_resume_source(self):
+        from moss_trainer.kohaku_resume import factor_at
+        self.p['settings']['training'].update(lr_scheduler='cosine', max_train_steps=4000,
+                                              lr_warmup_steps=100, kohaku_lr_min_ratio=0.1)
+        run = self.store.directory(self.p) / 'runs' / 'first'
+        folder = run / 'kohaku/checkpoints/step_00002000'
+        folder.mkdir(parents=True)
+        original = knobs(self.p, run)
+        (run / 'kohaku/config.json').write_text(json.dumps(original), encoding='utf-8')
+        (run / 'project_snapshot.json').write_text(json.dumps(self.p), encoding='utf-8')
+        (folder / 'state.json').write_text(json.dumps({'step': 2000}))
+        for name in ('trainable.safetensors', 'optim.pt', 'rng.0.pt'):
+            (folder / name).write_bytes(b'fixture')
+        self.p['settings']['training'].update(resume=str(folder), max_train_steps=6000)
+        self.assertEqual(validate(self.p), [])
+        second_run = run.parent / 'second'
+        write_run(self.p, self.env, second_run)
+        effective = json.loads((second_run / 'kohaku_knobs.json').read_text())['SCHEDULE']
+        self.assertAlmostEqual(factor_at(original['SCHEDULE'], 2000, 4000), factor_at(effective, 2000, 6000))
+        self.assertEqual(json.loads((second_run / 'resume_source.json').read_text())['step'], 2000)
+        self.assertEqual(json.loads((second_run / 'state_policy.json').read_text())['schedule'], effective)
+        # Simulate the next checkpoint's native config and discover its effective tail.
+        next_folder = second_run / 'kohaku/checkpoints/step_00003000'
+        next_folder.mkdir(parents=True)
+        (second_run / 'kohaku/config.json').write_text((second_run / 'kohaku_knobs.json').read_text())
+        (next_folder / 'state.json').write_text(json.dumps({'step': 3000}))
+        for name in ('trainable.safetensors', 'optim.pt', 'rng.0.pt'):
+            (next_folder / name).write_bytes(b'fixture')
+        self.p['settings']['training']['resume'] = str(next_folder)
+        self.assertEqual(knobs(self.p, run)['SCHEDULE'], effective)
+        self.p['settings']['training']['max_train_steps'] = 8000
+        extended = knobs(self.p, run)['SCHEDULE']
+        self.assertAlmostEqual(factor_at(effective, 3000, 6000), factor_at(extended, 3000, 8000))
 
     def test_resume_profile_switch_requires_compatible_recorded_optimizer(self):
         from moss_trainer.core import resume_differences

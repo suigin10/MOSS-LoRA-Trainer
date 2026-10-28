@@ -74,7 +74,7 @@ sd-scripts の環境要件を優先してください。GUI と学習用 Python 
 
 ## 初期値と変更方法
 
-新規Kohakuの初期値はRank / Alpha 8 / 4・AdamW8bit・学習率0.0002・Weight decay 0.0001・cosine・warmup 100・学習率下限10%・Attention＋FFN・上限4000STEP・100STEP保存・512px・Caption dropout 0・EMA 0.99です。ブロック22を学習から除外します。4000STEPは余裕を持たせた上限で、途中保存を比較して採用するモデルを選んでください。sd-scriptsを新規作成時に選ぶと、公式ガイドの例に合わせRank / Alpha 16 / 1・LR 0.0001・constant・10エポック・truncated_logit_normalを使用します。既存設定は維持します。全設定は[設定ガイド](STABLE_SETTINGS.md)を参照してください。
+新規Kohakuの初期値はLoRA・Rank / Alpha 16 / 16・AdamW・学習率0.0001・Weight decay 0.00005・cosine・warmup 0・学習率下限10%・Attention＋FFN・上限4000STEP・100STEP保存・stateは最新のみ・1024px・Caption dropout 0・EMAなし・学習除外なしです。速度重視なら学習解像度を512または768へ下げてください。sd-scriptsを新規作成時に選ぶと、公式ガイドの例に合わせRank / Alpha 16 / 1・LR 0.0001・constant・10エポック・truncated_logit_normalを使用します。既存設定は維持します。全設定は[設定ガイド](STABLE_SETTINGS.md)を参照してください。
 UIの値は保存済みプロジェクトの設定です。更新だけで既存値を新しい初期値へ上書きしません。
 CAMEも選択できます。必要パッケージは「かんたん導入」で追加します。既定のSchedulerはcosineです。比較用のcosine_with_restartsも選べます。Restart周期数は初期値2（2周期・再スタート1回）で、この方式を選んだときだけ編集できます。
 Timestepの新規初期値はsigma、学習用flow shiftは1.0です。Kohakuも対応します。方式を変える場合はstateを外して新規学習してください。自然文キャプションではCaption dropoutを0にすることを推奨します。
@@ -84,7 +84,7 @@ Timestepの新規初期値はsigma、学習用flow shiftは1.0です。Kohakuも
 
 LoRAの保存間隔は自由に変更できます。例: 50 STEPごと、250 STEPごと、1エポックごと。STEP間隔とエポック間隔を両方指定することもできます。0にした間隔は無効です。過去のLoRAファイルはstate保持設定では削除しません。
 
-再開用stateはモデル保存時に作成し、初期設定の「state は最新の1つだけ保持」がONなら、この実行中に正常保存した最新1つを残します。新しいstate保存が完了し、model・optimizer・scheduler・乱数・進捗ファイルが揃った後で古いstateを削除します。保存エラーや不完全な保存では前の正常なstateを残します。正常終了時のstate保存が成功した後は、それが最新の1つになります。別実行や再開元のstateを探して削除する処理はありません。既存の過去履歴の容量は自動では減りません。OFFにすれば保持制限を解除できます。
+再開用stateはモデル保存時に作成し、「state は最新の1つだけ保持」がONなら、この実行中に正常保存した最新1つを残します。新しいstate保存が完了し、model・optimizer・scheduler・乱数・進捗ファイルが揃った後で古いstateを削除します。保存エラーや不完全な保存では前の正常なstateを残します。正常終了時のstate保存が成功した後は、それが最新の1つになります。別実行や再開元のstateを探して削除する処理はありません。既存の過去履歴の容量は自動では減りません。OFFにすれば保持制限を解除できます。新規Kohaku・sd-scriptsともON（最新のみ）が初期値です。
 
 この方針はstateの保存回数ではなく保持数を減らします。保存時の書込み負荷と、一時的に新旧2つ分のディスク空き容量は必要です。古いstateを削除できなかった場合は警告をログに出し、学習を継続します。
 
@@ -142,15 +142,23 @@ Attention は初期値の `torch` を推奨します。`xformers` を選ぶと�
 
 ### 最終stateから追加学習・総上限の変更（sd-scripts）
 
-sd-scriptsでは同じ画面で最終stateを選び、総上限を増やします。Kohakuはconstantの場合だけ総STEP上限を増やせます。cosineなどでは元の総STEPを維持してください。例: 保存STEPが1500で、総STEP上限を3000にすると、累積1500から再開して1500 STEP分を追加します。次の更新は1501、100 STEP保存なら次の保存は1600です。上限は追加分のSTEP数ではありません。Epoch指定のプロジェクトでは総Epoch上限を編集します。
+KohakuではConstantとCosineの終了STEPを延長できます。終了STEPは追加分ではなく累積の総上限です。例: 保存済み2000、元の終了4000、変更後6000なら、今回の残りは4000 STEPです。画面には保存済みSTEP・元の終了STEP・変更後の終了STEP・残りSTEP・再開時と終了時の学習率を表示します。
 
-上限変更時もOptimizerのモーメントや更新回数、乱数状態と累積STEPを復元します。ただし、LRスケジュールの計算には総STEP数が使われるため、**LRは新しい総上限の曲線上の保存STEP位置で再計算します**。constantは一定のまま、linear / cosineは再開時のLRが変わります。元の最終STEPでLRが0になっていても、上限を延ばすことで新しい曲線のLRで追加学習できます。Optimizerやschedulerを空回ししてSTEPを合わせる処理は行いません。保存schedulerの更新回数と `train_state.json` のSTEPが一致しない場合は、誤った補正を避けるため停止します。
+- 終了STEPを変えない場合: 元のスケジュールをそのまま再開します。
+- Constantの延長: 同じ学習率で続行します。完走済みstateからの延長にも対応します。
+- Cosineの延長: 保存時の学習率を起点に、新しい終了STEPで元の最小学習率へ到達するCosineにします。Warmup中の中断なら元のWarmupを完了してから減衰します。学習率を開始時の値へ戻すことはありません。
+- Cosine完走済み・下限到達済み: 延長できません。途中のcheckpointを選んでください。
+- 他のKohakuスケジュール: 終了STEPを変更せず再開してください。終了STEPの短縮には対応しません。
+
+重み・Optimizerのモーメントや更新回数・乱数・データ位置・累積STEPを復元します。延長後のカーブは新しい実行の `kohaku/config.json` に保存され、再中断時にもその続きを使用します。元の実行フォルダ（特にconfig.json）を保持してください。延長時に保存schedulerのカウンターとSTEP、または実際の学習率と計画が一致しなければ、更新前に停止します。画面の学習率は保存された設定からの計算値です。
+
+sd-scriptsは従来どおり、新しい総上限のスケジュールで保存STEP位置の学習率を再計算します。Cosine / linearでは再開時のLRが上がる場合があります。Epoch指定では総Epoch上限を編集します。
 
 元設定snapshotがある場合は、モデル・Rank・Alpha・Optimizer種類・scheduler種類・学習率・warmup・勾配累積・データ設定等を比較します。総上限、保存間隔、生成設定は変更できます。Optimizer種類や学習率等も変更する場合は、再開指定を解除し、LoRA重みから新規の追加学習を始めてください。元設定がない外部stateでは比較できないため、元の設定と環境を手動で揃えてください。
 
 `skip_until_initial_step` は通常ONです。累積STEPとエポック内のバッチ位置を別々に扱い、勾配累積時も単位を揃えます。導入済みsd-scriptsのファイルは書き換えません。想定したソース構造と異なる版では、学習開始前にエラーで停止します。
 
-再開は新しい実行フォルダを作り、`resume_source.json` に元stateのパスと進捗、`state_policy.json` にLR再計算とstate保持方針を記録します。以前の実行結果や再開元stateは上書きしません。「停止」は強制終了のため、未保存の進捗は失われます。直近の保存が完了したstateを選択してください。旧版で既にずれたSTEPのまま再保存したstateの履歴は、この補正だけでは復元できません。
+再開は新しい実行フォルダを作り、`resume_source.json` に元stateのパスと進捗、`state_policy.json` にスケジュールとstate保持方針を記録します。以前の実行結果や再開元stateは上書きしません。「停止」は強制終了のため、未保存の進捗は失われます。直近の保存が完了したstateを選択してください。旧版で既にずれたSTEPのまま再保存したstateの履歴は、この補正だけでは復元できません。
 
 ### LoRA重みから新しいOptimizerで追加学習（sd-scripts）
 
@@ -245,7 +253,7 @@ KohakuはMSE lossと専用の解像度計画、LoRAターゲット指定を使�
 
 Kohaku選択時は、Epoch指定、初期LoRA重みからの追加学習、Adafactor、モジュール別Rank/LR、Text embedder学習、Caption shuffle・色拡張・ランダムクロップ、Epoch単位の保存/生成、開始前サンプル生成、サンプル行内オプションを実行前に拒否します。周期LoRA保存はKohakuのcheckpoint exportを使うため、state保存も必要です。
 
-constant以外のSchedulerでは、再開時に総STEPを変更する機能にも未対応です。元の総STEPを維持してください。
+終了STEPの延長はConstantとCosineに対応します。Cosine完走後の延長、他のスケジュールの上限変更には未対応です。
 
 これらはKohaku本体の制限ではなく、このGUI接続の対応範囲です。
 
@@ -281,6 +289,6 @@ KohakuMossTrainerは **KohakuMoss License 1.0** です。Apache-2.0に第10条�
 
 「03 学習」でLoRA / LoKr / LoHaを選択できます（両エンジン対応、初期値LoRA）。LoKr factorはLoKr選択時だけ、Polynomial powerはpolynomial選択時だけ編集できます。方式・factor・Schedulerの変更時はstateを外し、新規学習してください。詳しくは[設定ガイド](STABLE_SETTINGS.md#lora--lokr--loha)を参照してください。
 
-キャラクターLoKrの一括設定ボタンは廃止しました。LoKrは「学習方式」で選べます。KohakuのEMAは初期値0.99で、通常版に加えて平均化重みを出力します。
+キャラクターLoKrの一括設定ボタンは廃止しました。LoKrは「学習方式」で選べます。KohakuのEMAは初期OFF（0）です。有効にすると通常版に加えて平均化重みを出力します。
 
 除外・包含パターンは両エンジンに対応します。1行1正規表現でモジュール名に完全一致させ、包含を除外の例外として扱います。Kohakuでは選択した学習対象の範囲内に適用します。

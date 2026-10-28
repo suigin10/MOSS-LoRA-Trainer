@@ -44,7 +44,7 @@ class AdapterChoicesTests(unittest.TestCase):
         self.assertEqual(sd['lr_scheduler_args'], ['lr_end=0.0'])
         self.assertNotIn('lr_scheduler_num_cycles', sd)
         self.assertEqual(knobs(self.p, self.root)['SCHEDULE'],
-                         {'mode': 'polynomial', 'warmup': 100, 'end': -1, 'min_value': 0.0, 'power': 2.0})
+                         {'mode': 'polynomial', 'warmup': 0, 'end': -1, 'min_value': 0.0, 'power': 2.0})
         self.t['lr_scheduler_power'] = 0
         self.assertTrue(any('Polynomial' in e for e in validate(self.p, files=False)))
         self.t.update(lr_scheduler='cosine', network_algo='LoRA', lokr_factor=0)

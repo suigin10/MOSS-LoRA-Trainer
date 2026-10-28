@@ -219,7 +219,7 @@ class ResumeDialog(tk.Toplevel):
         options = ttk.Frame(body)
         options.pack(fill='x')
         self.restore = tk.BooleanVar(value=True)
-        ttk.Checkbutton(options, text=tr('元のモデル・データ・学習設定を復元'), variable=self.restore).pack(anchor='w')
+        ttk.Checkbutton(options, text=tr('元のモデル・データ・学習設定を復元'), variable=self.restore, command=self.update_preview).pack(anchor='w')
         limit_row = ttk.Frame(options)
         limit_row.pack(fill='x', pady=6)
         self.target_label = ttk.Label(limit_row, text=tr('総 STEP 上限'))
@@ -227,8 +227,10 @@ class ResumeDialog(tk.Toplevel):
         self.target = tk.StringVar(value='1500')
         self.target_entry = ttk.Entry(limit_row, textvariable=self.target, width=10)
         self.target_entry.pack(side='left')
-        ttk.Label(body, text=tr('sd-scripts、またはKohakuのconstantでは総上限を増やして追加学習できます。Kohakuのcosine等では元の総上限を維持してください。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=10)
-        ttk.Label(body, text=tr('上限変更時はOptimizerの状態と累積STEPを保持し、LRを新しい総上限のスケジュールで再計算します。cosine / linearでは再開時のLRが変わります。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=6)
+        self.preview = tk.StringVar()
+        ttk.Label(body, textvariable=self.preview, style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=10)
+        self.target.trace_add('write', self.update_preview)
+        ttk.Label(body, text=tr('Kohaku: 終了STEPを変えなければ元の計画で再開します。延長はConstantとCosineに対応します。'), style='Hint.TLabel', wraplength=570).pack(anchor='w', pady=6)
         ttk.Label(body, text=tr('state は optimizer / scheduler / 乱数状態を含みます。LoRA 単体から始める場合は「初期 LoRA 重み」を使用してください。'), style='Hint.TLabel', wraplength=910).pack(anchor='w', pady=10)
         controls = ttk.Frame(self, padding=(20, 12))
         controls.grid(row=1, column=0, sticky='ew')
@@ -261,7 +263,52 @@ class ResumeDialog(tk.Toplevel):
         self.target_mode = 'steps' if total else 'epochs'
         self.target_label.configure(text=tr('総 STEP 上限') if total else tr('総 Epoch 上限'))
         self.restore.set(bool(source))
+        self.update_preview()
         self.detail.set(info['path'] + '\n' + (' / '.join(info['errors']) if info['errors'] else (tr('元設定あり: 復元して再開できます。') if source else tr('元設定なし: 自動の設定比較はできません。元のモデル・Rank・optimizer 等と揃えてください。'))))
+
+    def update_preview(self, *_):
+        selection = self.tree.selection()
+        if not selection or not hasattr(self, 'target_mode'):
+            return
+        info = self.items[int(selection[0])]
+        try:
+            try:
+                target = int(self.target.get())
+            except ValueError:
+                self.preview.set(tr('終了STEPを整数で入力してください。'))
+                return
+            if self.target_mode != 'steps':
+                self.preview.set(tr('終了Epoch: {p0}（総上限）', p0=target))
+                return
+            if target <= info['step']:
+                raise ValueError(tr('総 STEP 上限は保存済み {p0} steps より大きくしてください（追加 STEP 数ではありません）', p0=info['step']))
+            source = info.get('snapshot')
+            project = source if source and self.restore.get() else self.app.collect()
+            training = dict(project['settings']['training'], max_train_steps=target)
+            original = info.get('total_steps') or (source['settings']['training']['max_train_steps'] if source else None)
+            lines = [tr('保存済みSTEP: {p0} / 元の終了STEP: {p1}', p0=info['step'], p1=original if original is not None else tr('不明')),
+                     tr('終了STEP: {p0} / 残りSTEP: {p1}', p0=target, p1=target - info['step'])]
+            if info.get('backend') == 'kohaku':
+                from .kohaku_resume import resume_schedule, factor_at
+                fallback = {'mode': training['lr_scheduler'], 'end': original or target,
+                            'warmup': training['lr_warmup_steps'] if training['lr_scheduler'] != 'constant' else 0,
+                            'min_value': training.get('kohaku_lr_min_ratio', 0.0)}
+                curve = resume_schedule(training, info, fallback)
+                if training['lr_scheduler'] in ('constant', 'cosine'):
+                    rate = training['learning_rate'] * factor_at(curve, info['step'], target)
+                    final = training['learning_rate'] * factor_at(curve, target, target)
+                    lines.append(tr('再開時の学習率: {p0:.6g} / 終了時: {p1:.6g}', p0=rate, p1=final))
+                if original is None or target == original:
+                    lines.append(tr('元の学習率スケジュールをそのまま再開します。'))
+                elif training['lr_scheduler'] == 'constant':
+                    lines.append(tr('同じ学習率のまま終了STEPまで続けます。'))
+                else:
+                    lines.append(tr('保存時の学習率を維持し、残りのCosineを新しい終了STEPまで延長します。Warmup中の場合は元のWarmupを完了します。'))
+            else:
+                lines.append(tr('sd-scripts: 上限を変更すると新しい総上限でLRを再計算します。再開時のLRが変わる場合があります。'))
+            self.preview.set('\n'.join(lines))
+        except (ValueError, TypeError, KeyError) as exc:
+            self.preview.set(str(exc) if str(exc) else tr('終了STEPを整数で入力してください。'))
 
     def external(self):
         folder = filedialog.askdirectory(parent=self, title=tr('train_state.json を含む state フォルダ'))
@@ -304,6 +351,9 @@ class ResumeDialog(tk.Toplevel):
                 training.update(max_train_steps=0, max_train_epochs=target)
             training.update(resume=info['path'], network_weights='')
             errors = resume_differences(p, info)
+            if backend(p['settings']) == 'kohaku':
+                from .kohaku_backend import problems
+                errors.extend(problems(p))
             if errors:
                 raise ValueError('\n'.join(errors))
             saved = copy.deepcopy(self.app.saved_snapshot)
@@ -492,7 +542,7 @@ class App(tk.Tk):
                 resumebar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 12))
                 ttk.Button(resumebar, text=tr('stateから再開・追加学習…'), command=self.resume_dialog).pack(side='left')
                 ttk.Button(resumebar, text=tr('再開指定を解除'), command=self.clear_resume).pack(side='left', padx=8)
-                ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（新規初期値100 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
+                ttk.Label(resumebar, text=tr('stateもLoRAと同じ保存間隔（Kohaku新規初期値100 steps）'), style='Hint.TLabel').pack(side='left', padx=8)
                 row = 2
             elif group == 'memory':
                 presets = ttk.Frame(page.body)

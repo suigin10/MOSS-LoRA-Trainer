@@ -1,5 +1,19 @@
 # 変更履歴
 
+## 0.2.5 — 2026-10-28
+
+- 再現性の良かったKohakuの実機設定を新規初期値へ反映。LoRA・16/16・AdamW・LR 0.0001・Weight decay 0.00005・cosine・warmup 0・1024px・4000STEP・100STEP保存・Caption dropout 0・EMAなし・学習除外なし・最新stateのみ保持。
+- 学習解像度欄と日英ガイドに、速度重視なら512または768へ下げる案内を追加。
+- RTX 4070 12GBで2026-10-28に4000STEP学習の正常終了を確認。sd-scriptsの初期値、既存プロジェクトと再開stateの設定は維持。
+
+
+## Unreleased
+
+- Kohaku: Constant/Cosineの終了STEP延長に対応。Cosineは保存時の学習率を維持して残り区間を延長し、再中断後も同じ曲線を復元。完走済みCosineの延長は案内を表示して拒否。
+- 再開画面に保存済み・終了・残りSTEPと学習率のプレビューを追加。元の実行を保持して新しい実行に再開元とスケジュールを記録。
+- 新規Kohaku既定値をRank/Alpha 8/8、500STEP保存、state全保持、EMAなしに変更。保存済み設定・sd-scriptsの既定値は維持。
+
+
 ## 0.2.4 — 2026-10-27
 
 - 新規Kohakuの既定値をRank / Alpha 8 / 4、AdamW8bit、LR 0.0002、Weight decay 0.0001、512px、Caption dropout 0、EMA 0.99へ変更。cosine・warmup 100・下限10%・100STEP保存を維持し、学習上限は余裕を持たせた4000STEP。既存プロジェクトの保存値は保持。

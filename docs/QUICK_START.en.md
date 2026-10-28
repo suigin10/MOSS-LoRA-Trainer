@@ -1,4 +1,4 @@
-# MOSS LoRA Trainer with Kohaku v0.2.4
+# MOSS LoRA Trainer with Kohaku v0.2.5
 
 The app reopens the last selected project on startup. If it no longer exists, a new project is created with default settings.
 
@@ -18,7 +18,7 @@ To update, close the app and copy the new application files into its folder. Kee
 
 Choose the engine in **Add / Copy** when creating a fresh project. Kohaku is preselected; copies retain their source settings.
 
-- **Kohaku:** LoRA, attn-mlp, rank/alpha 8/4, AdamW8bit, LR 0.0002, weight decay 0.0001, cosine with 100 warmup steps and a 10% LR floor, **4000-step limit, saving every 100 steps**. Resolution 512, batch 1, caption dropout 0, EMA 0.99, sigma sampling, flow shift 1.0, logit mean -1.09 and std 0.95. Block 22 is excluded from training by default. The limit leaves room to compare intermediate checkpoints; the final checkpoint need not be the best.
+- **Kohaku:** LoRA, attn-mlp, rank/alpha 16/16, AdamW, LR 0.0001, weight decay 0.00005, cosine with no warmup and a 10% LR floor, **4000-step limit, saving every 100 steps, retaining only the latest resume checkpoint**. Resolution 1024, batch 1, caption dropout 0, EMA disabled, sigma sampling, flow shift 1.0, logit mean -1.09 and std 0.95, no excluded modules. **For faster training, lower the training resolution to 512 or 768.**
 - **sd-scripts:** follows the bundled official MOSS guide example: rank/alpha 16/1, AdamW8bit, LR 0.0001, constant LR, 10 epochs, saving each epoch, resolution 1024, truncated_logit_normal sampling with mean -1.09, std 0.95 and shift 1.0. No default training exclusion or EMA. These are starting values, not a universal optimum.
 - **Target filtering:** both engines accept one full-match regular expression per line. Includes override exclusions within the selected target. For example, `layers[.]22[.].*` excludes block 22. This is separate from unconditional skip layers used for sample generation.
 - **Memory:** adjust quantization, swapping and batch fields directly. Capacity presets and the Character LoKr button have been removed. The settings guide remains available. Training samples and compilation start OFF.
@@ -79,6 +79,12 @@ Schedulers: constant (sd-scripts default), constant_with_warmup, cosine (Kohaku 
 
 Kohaku exports both ComfyUI and LyCORIS formats; the inference application must support the selected type. With LoHa/LoKr and Attention targets, fused QKV exports may include dense differences and be larger.
 
-Kohaku EMA defaults to 0.99 and writes separate `-ema0.99-comfy` and `-ema0.99-lycoris` exports while retaining normal exports. EMA state is saved for resuming. LoKr and LoHa remain available through the adapter-type selector.
+Kohaku EMA defaults to disabled (0). When enabled (e.g. 0.99), it writes separate `-ema0.99-comfy` and `-ema0.99-lycoris` exports while retaining normal exports. EMA state is saved for resuming. LoKr and LoHa remain available through the adapter-type selector.
 
 **Project folder** opens the project settings and all training runs. **Latest training folder** in Run / Logs opens the models, logs and settings for the latest single run.
+
+## Resume and extend training
+
+Use the resume dialog to select a completed checkpoint. Keeping the end step unchanged resumes the existing curve. The dialog shows saved, original end, new end and remaining steps, with the calculated resume and final learning rates.
+
+Kohaku Constant continues at the same LR when extended. Kohaku Cosine extends from the saved LR to the original LR floor at the new end step, without restarting warmup; an interrupted warmup finishes first. Completed Cosine runs cannot be extended this way: select an intermediate checkpoint. Other schedules keep their original end step. Keep the source run folder and config.json. The effective curve is saved in the new run so repeated resumes retain it. Weights, optimizer moments, RNG, loader position and cumulative steps are restored. Inconsistent saved LR/counters stop extensions before training updates. sd-scripts retains its previous behavior of recalculating LR on the new total curve.

@@ -1,4 +1,5 @@
 """Run upstream training and retain exported LoRAs before checkpoint pruning."""
+from contextlib import ExitStack
 import json
 from pathlib import Path
 import runpy
@@ -84,10 +85,27 @@ def main():
 
     CheckpointManager.prune = prune
     entry = original_export = None
+    resume_context = ExitStack()
     try:
         defaults = runpy.run_path(str(source / 'scripts/train/moss.py'))
         overrides = runpy.run_path(str(run_dir / 'kohaku_train.py'))
         knobs = {**defaults, **{k: v for k, v in overrides.items() if k.isupper()}}
+        if knobs.get('RESUME'):
+            # Keep the effective curve consistent when restoring AnySchedule state.
+            if not __package__:
+                sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from moss_trainer.kohaku_resume import restore_schedule
+            from moss_trainer.kohaku_backend import state_info
+            from kohakumoss.training.optim.schedule import Schedule
+            info = state_info(Path(knobs['RESUME']))
+            if info['errors']:
+                raise ValueError('\n'.join(info['errors']))
+            previous_total = info.get('total_steps')
+            if previous_total is None and info.get('snapshot'):
+                previous_total = info['snapshot']['settings']['training']['max_train_steps']
+            resume_context.enter_context(restore_schedule(Schedule, saved_step=info['step'],
+                extending=previous_total is not None and knobs['STEPS'] > previous_total))
+            print(f"Kohaku resume: step {info['step']} -> {knobs['STEPS']}; schedule={knobs['SCHEDULE']}", flush=True)
         if knobs.get('EMA'):
             from kohakumoss.training import entry
             original_export = entry.export_into
@@ -99,6 +117,7 @@ def main():
             entry.export_into = with_ema
         defaults['run'](knobs)
     finally:
+        resume_context.close()
         if original_export is not None:
             entry.export_into = original_export
         CheckpointManager.prune = original

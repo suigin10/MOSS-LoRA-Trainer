@@ -4,20 +4,20 @@
 
 | 項目 / Setting | Kohaku（新規初期値） | sd-scripts（公式ガイドの設定例） |
 | --- | --- | --- |
-| 解像度 / Resolution | 512 | 1024 |
+| 解像度 / Resolution | 1024 | 1024 |
 | 学習方式 / Adapter type | LoRA | LoRA |
-| Rank / Alpha | 8 / 4 | 16 / 1 |
-| Optimizer | AdamW8bit | AdamW8bit |
-| 学習率 / Learning rate | 0.0002 | 0.0001 |
+| Rank / Alpha | 16 / 16 | 16 / 1 |
+| Optimizer | AdamW | AdamW8bit |
+| 学習率 / Learning rate | 0.0001 | 0.0001 |
 | Scheduler | cosine | constant |
-| Warmup | 100 steps | 0 |
+| Warmup | 0 | 0 |
 | 最小学習率の比率 / Minimum LR ratio | 0.1（初期学習率の10%） | 対象外 |
 | 学習対象 / Training target | attn-mlp（Attention＋FFN） | 標準（または下記のFFN_down指定） |
 | 最大STEP / Total steps | 4000 | 10 epochs |
 | 保存間隔 / Save interval | 100 steps | 1 epoch |
-| Weight decay | 0.0001 | Optimizerの既定値 |
-| EMA | 0.99 | 対象外 |
-| 学習除外 / Excluded modules | `layers[.]22[.].*` | 必要に応じて指定 |
+| Weight decay | 0.00005 | Optimizerの既定値 |
+| EMA | 0（無効） | 対象外 |
+| 学習除外 / Excluded modules | なし | 必要に応じて指定 |
 | Caption dropout | 0 | 0 |
 | Timestep sampling | sigma | truncated_logit_normal |
 | 学習用 flow shift | 1.0 | 1.0 |
@@ -31,6 +31,8 @@
 Choose the engine in the new-project dialog to apply its defaults. Switching an existing project preserves its settings.
 
 4000STEPは学習の上限として余裕を持たせた値です。100STEPごとの保存結果を比較し、用途に合う途中のチェックポイントを選んでください。保存済みプロジェクトや実行中の設定は変更しません。
+
+**速度重視なら学習解像度を512または768へ下げてください。**
 
 ## 12GB向けのメモリ設定
 
@@ -91,7 +93,7 @@ Kohakuの出力は従来どおりComfyUI形式・LyCORIS形式の2種類です�
 
 ## 学習対象
 
-除外・包含パターンは両エンジンに対応します。1行1正規表現、モジュール名に完全一致、包含は除外の例外として優先されます。Kohakuでは選択した学習対象の範囲内で適用します。新規Kohakuプロジェクトは`layers[.]22[.].*`でブロック22を学習から除外します。サンプル生成用のSkip layersとは別設定です。
+除外・包含パターンは両エンジンに対応します。1行1正規表現、モジュール名に完全一致、包含は除外の例外として優先されます。Kohakuでは選択した学習対象の範囲内で適用します。新規Kohakuプロジェクトの除外パターンは空欄です。サンプル生成用のSkip layersとは別設定です。
 
 「03 学習」のKohaku学習対象は、attn-mlp（Attention＋FFN、初期値）、ffn-down（FFN_downのみ）、attn（Attentionのみ）から選べます。ffn-downは全ブロックのFFN_downだけを学習します。画風LoRAの比較用に使えますが、効果はデータセットによって異なります。対象を変える場合は再開stateを外し、新規学習してください。対象欄のなかった既存プロジェクトは従来のattn-mlpを引き継ぎます。
 
@@ -159,3 +161,5 @@ Tokenizer欄は通常空欄で構いません。QwenのW4A8 GPTQ形式は非対�
 モデルは任意のフォルダに保存でき、ComfyUIで使っているファイルも指定できます。
 
 SFT版を使う場合はDiTを [INT8 SFT](https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/diffusion_models/moss_image_sft_int8_convrot.safetensors) または [bf16 SFT](https://huggingface.co/Comfy-Org/MOSS-Image/blob/main/diffusion_models/moss_image_sft_bf16.safetensors) に変更します。
+
+Kohakuの新規プロジェクトではstateは最新の1つだけ保持します。全保持する場合は「state は最新の1つだけ保持」をOFFにします。

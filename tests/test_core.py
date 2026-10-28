@@ -487,4 +487,4 @@ class OfficialSdScriptsDefaultsTests(unittest.TestCase):
                          ('truncated_logit_normal', -1.09, 0.95))
         self.assertEqual(flow['exclude_patterns'], '')
         self.assertEqual(defaults('sd-scripts', legacy=True)['training']['max_train_steps'], 1500)
-        self.assertEqual(defaults()['training']['network_dim'], 8)
+        self.assertEqual(defaults()['training']['network_dim'], 16)

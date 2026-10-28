@@ -3,7 +3,7 @@
 **MOSS-ImageのLoRAを作成する、Windows向け学習GUI。**
 Kohaku / sd-scriptsの導入から、データセット設定・学習・追加学習・LoRA出力まで操作できます。
 
-[最新版 v0.2.4 をダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
+[最新版 v0.2.5 をダウンロード](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/latest) · [設定ガイド](docs/STABLE_SETTINGS.md) · [English](docs/QUICK_START.en.md)
 
 <img src="docs/images/amber-ui.png" alt="琥珀色UIの学習設定画面" width="800">
 
@@ -28,14 +28,13 @@ GUIはPython標準のtkinterで動作します。学習用パッケージとTrit
 - **学習方式：** LoRA / LoKr / LoHaを選択可能。cosine・再スタート付きcosine・polynomialなどのSchedulerに対応します。
 - **LoRA出力：** KohakuはComfyUI形式・LyCORIS形式で保存。GUIの表示言語は日本語／英語を切り替えられます。
 
-## v0.2.4の更新内容（2026-10-27）
+## v0.2.5の更新内容（2026-10-28）
 
-[配布ZIPとSHA-256](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/tag/v0.2.4)から取得できます。更新時はアプリを閉じ、`data/`と`backend/`を保持してアプリ本体を置き換えてください。
+[配布ZIPとSHA-256](https://github.com/suigin10/MOSS-LoRA-Trainer/releases/tag/v0.2.5)から取得できます。更新時はアプリを閉じ、`data/`と`backend/`を保持してアプリ本体を置き換えてください。
 
-- 新規作成画面で学習エンジンを選択。KohakuはRank / Alpha 8 / 4、AdamW8bit、LR 0.0002、cosine、512px、EMA 0.99、上限4000STEP・100STEP保存。途中保存を比較して採用STEPを選べます。
-- sd-scriptsは公式MOSSガイドの設定例（Rank / Alpha 16 / 1、LR 0.0001、constant、10エポック、truncated_logit_normal）に準拠。
-- Kohakuでも除外・包含パターンを使用可能。新規Kohakuではブロック22を学習対象から除外。容量別プリセットとキャラクターLoKrのボタンは削除しました。
-- 既存プロジェクトの保存値は維持します。詳細は[設定ガイド](docs/STABLE_SETTINGS.md)を参照してください。
+- 再現性の良かったKohakuの実機設定を新規初期値へ反映。LoRA・Rank / Alpha 16 / 16・AdamW・学習率0.0001・Weight decay 0.00005・cosine・warmup 0・1024px・4000STEP・100STEP保存・Caption dropout 0・EMAなし・ブロック除外なし。stateは最新の1つだけ保持します。
+- **速度重視なら学習解像度を512または768へ下げてください。**
+- RTX 4070 12GBで、この設定の4000STEP学習が正常終了したことを確認しました。sd-scriptsの初期値と既存プロジェクトの保存値は維持します。
 
 ## キャラクターLoKrの実機確認・生成物の配布
 

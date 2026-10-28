@@ -25,7 +25,7 @@ class CatalogTests(unittest.TestCase):
     def test_every_ui_template_and_field_has_an_english_translation(self):
         root = Path(__file__).resolve().parents[1] / 'moss_trainer'
         keys = set()
-        for filename in ('gui.py', 'core.py'):
+        for filename in ('gui.py', 'core.py', 'kohaku_backend.py', 'kohaku_resume.py'):
             tree = ast.parse((root / filename).read_text(encoding='utf-8'))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'tr' and node.args and isinstance(node.args[0], ast.Constant):

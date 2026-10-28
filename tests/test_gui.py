@@ -52,14 +52,16 @@ class GuiTests(unittest.TestCase):
         fresh = self.app.store.create('New defaults')
         self.app.load_project(fresh)
         current = self.app.collect()['settings']
-        self.assertEqual((current['training']['network_dim'], current['training']['network_alpha']), (8, 4))
+        self.assertEqual((current['training']['network_dim'], current['training']['network_alpha']), (16, 16))
         self.assertEqual(current['training']['max_train_steps'], 4000)
-        self.assertEqual((current['training']['optimizer_type'], current['training']['learning_rate']), ('AdamW8bit', 0.0002))
-        self.assertEqual((current['training']['weight_decay'], current['training']['kohaku_ema']), ('0.0001', 0.99))
-        self.assertEqual((current['dataset']['resolution'], current['dataset']['caption_dropout_rate']), (512, 0.0))
-        self.assertEqual(current['flow']['exclude_patterns'], 'layers[.]22[.].*')
+        self.assertEqual((current['training']['optimizer_type'], current['training']['learning_rate']), ('AdamW', 0.0001))
+        self.assertEqual((current['training']['weight_decay'], current['training']['kohaku_ema']), ('0.00005', 0.0))
+        self.assertEqual((current['dataset']['resolution'], current['dataset']['caption_dropout_rate']), (1024, 0.0))
+        self.assertEqual(current['flow']['exclude_patterns'], '')
         self.assertEqual(current['training']['kohaku_train_target'], 'attn-mlp')
         self.assertEqual(current['training']['save_every_n_steps'], 100)
+        self.assertEqual(current['training']['lr_warmup_steps'], 0)
+        self.assertTrue(current['training']['keep_latest_state_only'])
         self.assertEqual((current['flow']['timestep_sampling'], current['flow']['discrete_flow_shift']), ('sigma', 1.0))
         fresh['settings']['training'].update(network_dim=32, network_alpha=32, max_train_steps=2000, kohaku_train_target='ffn-down')
         fresh['settings']['flow'].update(timestep_sampling='shift', discrete_flow_shift=3.0)
@@ -352,7 +354,7 @@ class GuiTests(unittest.TestCase):
         dialog = ProjectDialog(self.app)
         dialog.name.set('デフォルト新規')
         dialog.create()
-        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 8)
+        self.assertEqual(self.app.collect()['settings']['training']['network_dim'], 16)
         self.assertEqual(self.app.collect()['settings']['memory']['blocks_to_swap'], 16)
 
     def test_project_and_latest_training_folder_buttons_open_distinct_locations(self):
@@ -389,7 +391,7 @@ class GuiTests(unittest.TestCase):
         project = self.app.collect()
         self.assertEqual(project['settings']['model']['vae'], 'D:/models/vae.safetensors')
         self.assertEqual(project['settings']['model']['text_encoder'], 'D:/models/qwen.safetensors')
-        self.assertEqual(project['settings']['training']['learning_rate'], 0.0002)
+        self.assertEqual(project['settings']['training']['learning_rate'], 0.0001)
         self.assertEqual(project['subsets'][0]['image_dir'], '')
 
     def test_delete_last_project_and_add_again_with_models_retained(self):
@@ -566,6 +568,50 @@ class GuiTests(unittest.TestCase):
         self.app.poll()
         self.assertFalse(self.app.busy)
         self.assertEqual(self.app.env, fresh)
+
+    def kohaku_resume_fixture(self, step=2000):
+        source = self.app.collect()
+        source['settings'] = defaults('kohaku')
+        run = self.app.store.directory(self.app.project) / 'runs' / 'kohaku-fixture'
+        state = run / 'kohaku/checkpoints' / f'step_{step:08d}'
+        state.mkdir(parents=True)
+        atomic_json(run / 'project_snapshot.json', source)
+        atomic_json(run / 'kohaku/config.json', {'STEPS': 4000, 'LR': 0.0002,
+            'SCHEDULE': {'mode': 'cosine', 'end': 4000, 'warmup': 100, 'min_value': 0.1}})
+        atomic_json(state / 'state.json', {'step': step})
+        for name in ('trainable.safetensors', 'optim.pt', 'rng.0.pt'):
+            (state / name).write_bytes(b'fixture')
+        return state
+
+    def test_kohaku_resume_previews_and_applies_cosine_extension(self):
+        state = self.kohaku_resume_fixture()
+        dialog = ResumeDialog(self.app)
+        self.assertEqual(dialog.target.get(), '4000')
+        self.assertIn('残りSTEP: 2000', dialog.preview.get())
+        self.assertIn('そのまま再開', dialog.preview.get())
+        dialog.target.set('abc')
+        self.assertIn('整数', dialog.preview.get())
+        dialog.target.set('6000')
+        self.assertIn('残りSTEP: 4000', dialog.preview.get())
+        self.assertIn('残りのCosine', dialog.preview.get())
+        self.assertIn('再開時の学習率:', dialog.preview.get())
+        dialog.apply()
+        training = self.app.collect()['settings']['training']
+        self.assertEqual(training['max_train_steps'], 6000)
+        self.assertEqual(training['resume'], str(state))
+        self.assertEqual(training['lr_scheduler'], 'cosine')
+
+    def test_completed_cosine_cannot_be_silently_extended(self):
+        self.kohaku_resume_fixture(4000)
+        before = self.app.collect()
+        dialog = ResumeDialog(self.app)
+        self.addCleanup(dialog.destroy)
+        dialog.target.set('6000')
+        self.assertIn('完走済み', dialog.preview.get())
+        with patch('moss_trainer.gui.messagebox.showerror') as error:
+            dialog.apply()
+        self.assertTrue(error.called)
+        self.assertEqual(self.app.collect(), before)
 
     def test_resume_dialog_footer_is_visible_with_small_window_and_long_detail(self):
         dialog = ResumeDialog(self.app)
